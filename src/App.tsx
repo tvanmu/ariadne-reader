@@ -19,6 +19,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [showAuth, setShowAuth] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -28,14 +29,27 @@ export default function App() {
 
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setShowPasswordReset(hasPasswordRecoveryParams());
       setAuthReady(true);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
-      setShowAuth(false);
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowPasswordReset(true);
+        setShowAuth(false);
+        setActiveProject(null);
+        return;
+      }
+
       if (!nextSession) {
         setActiveProject(null);
+        setShowPasswordReset(false);
+      }
+
+      if (event === 'SIGNED_IN') {
+        setShowAuth(false);
       }
     });
 
@@ -56,7 +70,9 @@ export default function App() {
   }
 
   const storageMode: StorageMode = session?.user ? 'cloud' : 'local';
-  const screenKey = showAuth && !session?.user
+  const screenKey = showPasswordReset
+    ? 'password-reset'
+    : showAuth && !session?.user
     ? 'auth'
     : activeProject
       ? `reader:${activeProject.id}`
@@ -96,7 +112,15 @@ export default function App() {
       </header>
 
       <div className="screen-fade" key={screenKey}>
-        {showAuth && !session?.user ? (
+        {showPasswordReset ? (
+          <AuthScreen
+            initialMode="update-password"
+            onPasswordUpdated={() => {
+              clearAuthRedirectUrl();
+              setShowPasswordReset(false);
+            }}
+          />
+        ) : showAuth && !session?.user ? (
           <AuthScreen onCancel={() => setShowAuth(false)} />
         ) : activeProject ? (
           <PdfReader
@@ -115,4 +139,15 @@ export default function App() {
       </div>
     </main>
   );
+}
+
+function hasPasswordRecoveryParams() {
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const queryParams = new URLSearchParams(window.location.search);
+
+  return hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
+}
+
+function clearAuthRedirectUrl() {
+  window.history.replaceState(null, document.title, new URL('/', window.location.origin));
 }

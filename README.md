@@ -28,14 +28,26 @@ Signing in is the path to cloud sync, not a requirement for trying the product.
 
 3. Run the SQL in `docs/supabase-setup.sql` in the Supabase SQL editor.
 
-4. Copy `.env.example` to `.env.local` and fill in:
+4. In Supabase Auth URL Configuration, set the Site URL and allowed Redirect URLs for the
+   environments you use. Password confirmation and password reset emails must return to an
+   allowed URL.
+
+   ```text
+   Site URL: https://ariadne-reader.vercel.app
+   Redirect URLs:
+   https://ariadne-reader.vercel.app/**
+   http://localhost:5173/**
+   http://localhost:5174/**
+   ```
+
+5. Copy `.env.example` to `.env.local` and fill in:
 
    ```bash
    VITE_SUPABASE_URL=your-project-url
    VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
    ```
 
-5. Start the app:
+6. Start the app:
 
    ```bash
    npm run dev

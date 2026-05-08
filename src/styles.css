@@ -357,6 +357,17 @@ h3 {
   gap: 6px;
 }
 
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.auth-actions .text-button {
+  margin-top: 0;
+}
+
 .small-button {
   min-height: 34px;
   padding: 0 12px;
