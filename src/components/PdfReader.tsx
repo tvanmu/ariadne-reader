@@ -429,10 +429,12 @@ function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
           throw new Error('Canvas rendering is not available in this browser.');
         }
 
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2.5);
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
+        context.setTransform(outputScale, 0, 0, outputScale, 0, 0);
 
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
