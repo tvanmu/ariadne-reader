@@ -1,4 +1,4 @@
-import { Compass, MapPinned } from 'lucide-react';
+import { MapPinned, Route } from 'lucide-react';
 import type { PDFProject } from '../types';
 import {
   calculateChapterProgress,
@@ -21,7 +21,7 @@ export default function ProgressPanel({ project, sessionSeconds }: ProgressPanel
   return (
     <section className="reader-panel">
       <div className="panel-heading">
-        <Compass size={17} />
+        <Route size={17} />
         <h2>Thread</h2>
       </div>
 

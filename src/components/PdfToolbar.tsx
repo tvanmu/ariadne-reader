@@ -5,8 +5,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Compass,
   RotateCcw,
+  Route,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -138,7 +138,7 @@ export default function PdfToolbar({
           aria-label={rightOpen ? 'Hide thread' : 'Show thread'}
           aria-pressed={rightOpen}
         >
-          <Compass size={15} />
+          <Route size={15} />
           <span>Thread</span>
         </button>
       </div>
