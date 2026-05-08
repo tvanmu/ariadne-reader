@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, BookOpenCheck, Clock3, Cloud, RefreshCw } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { calculateFileHash } from '../services/fileHash';
 import { getPdfPageCount } from '../services/pdfMetadata';
@@ -208,6 +208,33 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
             : 'Drop a PDF and start reading. Ariadne saves your place in this browser — sign in anytime to sync.'}
         </p>
         <UploadDropzone onUpload={handleUpload} disabled={uploading} variant="hero" />
+        <div className="hero-assurance" aria-label="Ariadne Reader benefits">
+          <div className="hero-assurance-item">
+            <BookOpenCheck size={16} />
+            <div>
+              <strong>Resume precisely</strong>
+              <span>Page, zoom, and progress are remembered.</span>
+            </div>
+          </div>
+          <div className="hero-assurance-item">
+            <Clock3 size={16} />
+            <div>
+              <strong>Track the work</strong>
+              <span>Reading time, deadlines, and pace stay visible.</span>
+            </div>
+          </div>
+          <div className="hero-assurance-item">
+            <Cloud size={16} />
+            <div>
+              <strong>{storageMode === 'cloud' ? 'Synced library' : 'Sync when ready'}</strong>
+              <span>
+                {storageMode === 'cloud'
+                  ? 'Your projects follow your account.'
+                  : 'No account required to begin.'}
+              </span>
+            </div>
+          </div>
+        </div>
         {showEmptyHint && storageMode === 'local' ? (
           <p className="hero-foot">
             No account needed.{' '}

@@ -33,9 +33,12 @@ body,
 body {
   margin: 0;
   background:
+    linear-gradient(90deg, rgba(238, 231, 214, 0.018) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(238, 231, 214, 0.012) 1px, transparent 1px),
     radial-gradient(60rem 40rem at 12% -10%, rgba(201, 168, 95, 0.07), transparent 70%),
     radial-gradient(40rem 30rem at 110% 110%, rgba(201, 168, 95, 0.045), transparent 70%),
     var(--ink);
+  background-size: 88px 88px, 88px 88px, auto, auto, auto;
   color: var(--ivory);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -524,18 +527,66 @@ h3 {
 /* Dashboard */
 
 .dashboard {
-  width: min(1200px, 100%);
+  width: min(1220px, 100%);
   margin: 0 auto;
 }
 
 .dashboard-hero {
+  position: relative;
+  isolation: isolate;
   display: grid;
   justify-items: center;
-  gap: 18px;
-  max-width: 760px;
-  margin: 28px auto 56px;
-  padding: 0 12px;
+  gap: 20px;
+  max-width: 1060px;
+  margin: 18px auto 56px;
+  padding: clamp(34px, 5vw, 62px) clamp(20px, 4vw, 54px) 30px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(238, 231, 214, 0.055), rgba(238, 231, 214, 0.018) 38%, transparent 100%),
+    radial-gradient(70% 78% at 50% 10%, rgba(201, 168, 95, 0.12), transparent 64%),
+    rgba(11, 11, 10, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(238, 231, 214, 0.08),
+    0 32px 90px rgba(0, 0, 0, 0.38);
   text-align: center;
+}
+
+.dashboard-hero::before,
+.dashboard-hero::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+}
+
+.dashboard-hero::before {
+  background:
+    repeating-radial-gradient(
+      circle at 50% 44%,
+      transparent 0,
+      transparent 28px,
+      rgba(201, 168, 95, 0.08) 29px,
+      rgba(201, 168, 95, 0.08) 30px
+    );
+  mask-image: radial-gradient(circle at 50% 42%, black 0, transparent 58%);
+  opacity: 0.54;
+}
+
+.dashboard-hero::after {
+  background:
+    linear-gradient(90deg, transparent, rgba(201, 168, 95, 0.22), transparent) 50% 0 / 64% 1px no-repeat,
+    linear-gradient(90deg, transparent, rgba(238, 231, 214, 0.13), transparent) 50% 100% / 72% 1px no-repeat,
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 26px,
+      rgba(238, 231, 214, 0.035) 26px,
+      rgba(238, 231, 214, 0.035) 27px
+    );
+  opacity: 0.72;
 }
 
 .hero-eyebrow {
@@ -550,20 +601,22 @@ h3 {
 .hero-headline {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(40px, 5.6vw, 72px);
+  font-size: clamp(42px, 6.2vw, 78px);
   font-weight: 500;
   line-height: 1.04;
-  letter-spacing: -0.012em;
   color: var(--ivory);
   max-width: 18ch;
+  text-wrap: balance;
+  text-shadow: 0 24px 54px rgba(0, 0, 0, 0.52);
 }
 
 .hero-sub {
   margin: 0;
-  max-width: 56ch;
+  max-width: 62ch;
   color: var(--ivory-dim);
   font-size: 17px;
   line-height: 1.65;
+  text-wrap: balance;
 }
 
 .hero-foot {
@@ -572,9 +625,60 @@ h3 {
   font-size: 13px;
 }
 
+.hero-assurance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(820px, 100%);
+  margin-top: 2px;
+  overflow: hidden;
+  border: 1px solid rgba(238, 231, 214, 0.11);
+  border-radius: var(--radius);
+  background: rgba(238, 231, 214, 0.07);
+}
+
+.hero-assurance-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 14px 16px;
+  background:
+    linear-gradient(180deg, rgba(238, 231, 214, 0.035), transparent),
+    rgba(7, 7, 6, 0.72);
+  text-align: left;
+}
+
+.hero-assurance-item + .hero-assurance-item {
+  border-left: 1px solid rgba(238, 231, 214, 0.09);
+}
+
+.hero-assurance-item svg {
+  margin-top: 2px;
+  color: var(--gold);
+}
+
+.hero-assurance-item strong,
+.hero-assurance-item span {
+  display: block;
+}
+
+.hero-assurance-item strong {
+  color: var(--ivory);
+  font-size: 13px;
+}
+
+.hero-assurance-item span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* Upload dropzone */
 
 .upload-dropzone {
+  position: relative;
   display: grid;
   place-items: center;
   align-content: center;
@@ -586,6 +690,7 @@ h3 {
   border-radius: var(--radius);
   background: rgba(0, 0, 0, 0.18);
   color: var(--ivory);
+  overflow: hidden;
   transition:
     border-color 240ms var(--ease-out-cubic),
     background 240ms var(--ease-out-cubic),
@@ -593,16 +698,28 @@ h3 {
     transform 240ms var(--ease-out-cubic);
 }
 
+.upload-dropzone::before {
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(238, 231, 214, 0.06);
+  border-radius: 6px;
+  content: "";
+  pointer-events: none;
+}
+
 .upload-dropzone svg {
+  position: relative;
   color: var(--gold);
 }
 
 .upload-dropzone span {
+  position: relative;
   font-weight: 600;
   font-size: 15px;
 }
 
 .upload-dropzone small {
+  position: relative;
   color: var(--muted);
 }
 
@@ -633,13 +750,29 @@ h3 {
 }
 
 .upload-dropzone.hero {
-  width: min(640px, 100%);
-  min-height: 220px;
+  width: min(700px, 100%);
+  min-height: 232px;
   margin-top: 12px;
   border-width: 1.5px;
   background:
-    radial-gradient(60% 80% at 50% 110%, rgba(201, 168, 95, 0.08), transparent 70%),
+    linear-gradient(
+      135deg,
+      transparent 0 calc(50% - 1px),
+      rgba(201, 168, 95, 0.1) calc(50% - 1px) 50%,
+      transparent 50%
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(238, 231, 214, 0.028) 0,
+      rgba(238, 231, 214, 0.028) 1px,
+      transparent 1px,
+      transparent 18px
+    ),
+    radial-gradient(60% 80% at 50% 110%, rgba(201, 168, 95, 0.1), transparent 70%),
     rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(238, 231, 214, 0.06),
+    0 18px 44px rgba(0, 0, 0, 0.28);
 }
 
 .upload-dropzone.hero span {
@@ -1372,6 +1505,16 @@ h3 {
 
   .dashboard-hero {
     margin: 16px auto 36px;
+    padding: 30px 16px 20px;
+  }
+
+  .hero-assurance {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-assurance-item + .hero-assurance-item {
+    border-top: 1px solid rgba(238, 231, 214, 0.09);
+    border-left: 0;
   }
 
   .project-grid,
@@ -1418,5 +1561,16 @@ h3 {
   .project-card .card-delete {
     opacity: 1;
     transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }
