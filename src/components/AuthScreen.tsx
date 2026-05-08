@@ -12,6 +12,16 @@ interface AuthScreenProps {
 }
 
 function getAuthRedirectUrl() {
+  const configuredRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL?.trim();
+
+  if (configuredRedirectUrl) {
+    return new URL('/', configuredRedirectUrl).toString();
+  }
+
+  if (window.location.hostname === 'localhost' && window.location.port === '3000') {
+    return 'http://localhost:5173/';
+  }
+
   return new URL('/', window.location.origin).toString();
 }
 

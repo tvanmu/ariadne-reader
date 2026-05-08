@@ -45,7 +45,11 @@ Signing in is the path to cloud sync, not a requirement for trying the product.
    ```bash
    VITE_SUPABASE_URL=your-project-url
    VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   VITE_AUTH_REDIRECT_URL=http://localhost:5173/
    ```
+
+   `VITE_AUTH_REDIRECT_URL` is optional in production. It is useful locally because auth emails
+   should return to the Vite dev server instead of an old `localhost:3000` tab.
 
 6. Start the app:
 
