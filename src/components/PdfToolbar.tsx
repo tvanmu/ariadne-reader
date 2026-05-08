@@ -6,10 +6,10 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
-  Route,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import MazeIcon from './MazeIcon';
 
 interface PdfToolbarProps {
   title: string;
@@ -138,7 +138,7 @@ export default function PdfToolbar({
           aria-label={rightOpen ? 'Hide thread' : 'Show thread'}
           aria-pressed={rightOpen}
         >
-          <Route size={15} />
+          <MazeIcon size={15} />
           <span>Thread</span>
         </button>
       </div>

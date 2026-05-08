@@ -1,4 +1,4 @@
-import { MapPinned, Route } from 'lucide-react';
+import { MapPinned } from 'lucide-react';
 import type { PDFProject } from '../types';
 import {
   calculateChapterProgress,
@@ -6,6 +6,7 @@ import {
   getCurrentChapter,
   getDeadlineStatus,
 } from '../utils/progress';
+import MazeIcon from './MazeIcon';
 
 interface ProgressPanelProps {
   project: PDFProject;
@@ -21,7 +22,7 @@ export default function ProgressPanel({ project, sessionSeconds }: ProgressPanel
   return (
     <section className="reader-panel">
       <div className="panel-heading">
-        <Route size={17} />
+        <MazeIcon size={17} />
         <h2>Thread</h2>
       </div>
 
