@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { pdfjsLib } from '../lib/pdf';
+import LabyrinthMark from './LabyrinthMark';
 import { getPdfBlob } from '../storage/indexedDb';
 import {
   downloadPdfBlob,
@@ -63,6 +64,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -352,7 +355,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   if (loading) {
     return (
       <section className="reader-loading">
-        <Loader2 className="spin" size={26} />
+        <LabyrinthMark size={48} spinning />
         <span>Preparing the document...</span>
       </section>
     );
@@ -381,6 +384,10 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         zoom={zoom}
         pageInput={pageInput}
         saveState={saveState}
+        leftOpen={leftOpen}
+        rightOpen={rightOpen}
+        onToggleLeft={() => setLeftOpen((open) => !open)}
+        onToggleRight={() => setRightOpen((open) => !open)}
         onBack={onBack}
         onPageInputChange={setPageInput}
         onJump={() => scrollToPage(Number(pageInput))}
@@ -391,8 +398,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onResetZoom={() => setZoom(1)}
       />
 
-      <div className="reader-grid">
-        <aside className="reader-side left">
+      <div className={`reader-grid${leftOpen ? ' left-open' : ''}${rightOpen ? ' right-open' : ''}`}>
+        <aside className={`reader-side left${leftOpen ? '' : ' is-collapsed'}`}>
           <ChapterPanel
             chapters={project.chapters}
             currentPage={currentPage}
@@ -426,7 +433,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           </div>
         </div>
 
-        <aside className="reader-side right">
+        <aside className={`reader-side right${rightOpen ? '' : ' is-collapsed'}`}>
           <ProgressPanel project={{ ...project, currentPage }} sessionSeconds={sessionSeconds} />
           <DeadlineEditor project={project} onSave={saveDeadline} />
           <ReadingStats project={project} sessionSeconds={sessionSeconds} />

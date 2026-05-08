@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { BookOpen, LogIn, LogOut } from 'lucide-react';
+import { LogIn, LogOut } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
+import LabyrinthMark from './components/LabyrinthMark';
 import PdfReader from './components/PdfReader';
 
 type StorageMode = 'local' | 'cloud';
@@ -47,7 +48,7 @@ export default function App() {
     return (
       <main className="app-shell centered-shell">
         <div className="quiet-loader" aria-label="Loading Ariadne Reader">
-          <BookOpen size={28} />
+          <LabyrinthMark size={56} spinning />
           <span>Opening the archive...</span>
         </div>
       </main>
@@ -55,6 +56,11 @@ export default function App() {
   }
 
   const storageMode: StorageMode = session?.user ? 'cloud' : 'local';
+  const screenKey = showAuth && !session?.user
+    ? 'auth'
+    : activeProject
+      ? `reader:${activeProject.id}`
+      : 'dashboard';
 
   return (
     <main className="app-shell">
@@ -65,7 +71,7 @@ export default function App() {
           onClick={() => setActiveProject(null)}
           aria-label="Return to dashboard"
         >
-          <span className="wordmark-mark" aria-hidden="true" />
+          <LabyrinthMark size={36} />
           <span>
             <strong>Ariadne Reader</strong>
             <small>A clear path through dense PDFs.</small>
@@ -89,22 +95,24 @@ export default function App() {
         )}
       </header>
 
-      {showAuth && !session?.user ? (
-        <AuthScreen onCancel={() => setShowAuth(false)} />
-      ) : activeProject ? (
-        <PdfReader
-          projectId={activeProject.id}
-          storageMode={activeProject.storageMode}
-          onBack={() => setActiveProject(null)}
-        />
-      ) : (
-        <Dashboard
-          user={session?.user ?? null}
-          storageMode={storageMode}
-          onOpenProject={(projectId) => setActiveProject({ id: projectId, storageMode })}
-          onSignIn={() => setShowAuth(true)}
-        />
-      )}
+      <div className="screen-fade" key={screenKey}>
+        {showAuth && !session?.user ? (
+          <AuthScreen onCancel={() => setShowAuth(false)} />
+        ) : activeProject ? (
+          <PdfReader
+            projectId={activeProject.id}
+            storageMode={activeProject.storageMode}
+            onBack={() => setActiveProject(null)}
+          />
+        ) : (
+          <Dashboard
+            user={session?.user ?? null}
+            storageMode={storageMode}
+            onOpenProject={(projectId) => setActiveProject({ id: projectId, storageMode })}
+            onSignIn={() => setShowAuth(true)}
+          />
+        )}
+      </div>
     </main>
   );
 }

@@ -1,4 +1,15 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BookMarked,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Compass,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 
 interface PdfToolbarProps {
   title: string;
@@ -7,7 +18,11 @@ interface PdfToolbarProps {
   progress: number;
   zoom: number;
   pageInput: string;
-  saveState: string;
+  saveState: 'idle' | 'saving' | 'saved' | 'error' | string;
+  leftOpen: boolean;
+  rightOpen: boolean;
+  onToggleLeft: () => void;
+  onToggleRight: () => void;
   onBack: () => void;
   onPageInputChange: (value: string) => void;
   onJump: () => void;
@@ -26,6 +41,10 @@ export default function PdfToolbar({
   zoom,
   pageInput,
   saveState,
+  leftOpen,
+  rightOpen,
+  onToggleLeft,
+  onToggleRight,
   onBack,
   onPageInputChange,
   onJump,
@@ -37,15 +56,27 @@ export default function PdfToolbar({
 }: PdfToolbarProps) {
   return (
     <div className="reader-toolbar">
-      <button className="icon-text-button subtle" type="button" onClick={onBack}>
-        <ArrowLeft size={16} />
-        Dashboard
-      </button>
+      <div className="toolbar-left">
+        <button className="icon-text-button subtle" type="button" onClick={onBack}>
+          <ArrowLeft size={16} />
+          Library
+        </button>
+        <button
+          className={`panel-toggle${leftOpen ? ' is-active' : ''}`}
+          type="button"
+          onClick={onToggleLeft}
+          aria-label={leftOpen ? 'Hide chapters' : 'Show chapters'}
+          aria-pressed={leftOpen}
+        >
+          <BookMarked size={15} />
+          <span>Chapters</span>
+        </button>
+      </div>
 
       <div className="toolbar-title">
         <strong>{title}</strong>
         <small>
-          Page {currentPage} / {totalPages} - {Math.round(progress)}%
+          Page {currentPage} / {totalPages} · {Math.round(progress)}%
         </small>
       </div>
 
@@ -90,7 +121,27 @@ export default function PdfToolbar({
         </button>
       </div>
 
-      <span className={`save-state ${saveState}`}>{saveState}</span>
+      <div className="toolbar-right">
+        <span className={`save-pip ${saveState}`} aria-label={`Save state: ${saveState}`}>
+          {saveState === 'saved' ? (
+            <Check size={13} />
+          ) : saveState === 'error' ? (
+            <AlertTriangle size={13} />
+          ) : (
+            <span className="save-pip-dot" />
+          )}
+        </span>
+        <button
+          className={`panel-toggle${rightOpen ? ' is-active' : ''}`}
+          type="button"
+          onClick={onToggleRight}
+          aria-label={rightOpen ? 'Hide thread' : 'Show thread'}
+          aria-pressed={rightOpen}
+        >
+          <Compass size={15} />
+          <span>Thread</span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -3,17 +3,25 @@ import { UploadCloud } from 'lucide-react';
 
 interface UploadDropzoneProps {
   disabled: boolean;
+  variant?: 'default' | 'hero';
   onUpload: (file: File) => void;
 }
 
-export default function UploadDropzone({ disabled, onUpload }: UploadDropzoneProps) {
+export default function UploadDropzone({ disabled, variant = 'default', onUpload }: UploadDropzoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [pulsing, setPulsing] = useState(false);
+
+  function fireUpload(file: File) {
+    setPulsing(true);
+    window.setTimeout(() => setPulsing(false), 600);
+    onUpload(file);
+  }
 
   function pickFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) {
-      onUpload(file);
+      fireUpload(file);
     }
     event.target.value = '';
   }
@@ -24,14 +32,23 @@ export default function UploadDropzone({ disabled, onUpload }: UploadDropzonePro
 
     const file = event.dataTransfer.files[0];
     if (file) {
-      onUpload(file);
+      fireUpload(file);
     }
   }
+
+  const classes = [
+    'upload-dropzone',
+    variant === 'hero' ? 'hero' : '',
+    dragging ? 'dragging' : '',
+    pulsing ? 'pulsing' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <>
       <button
-        className={`upload-dropzone ${dragging ? 'dragging' : ''}`}
+        className={classes}
         type="button"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
@@ -43,9 +60,19 @@ export default function UploadDropzone({ disabled, onUpload }: UploadDropzonePro
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
       >
-        <UploadCloud size={24} />
-        <span>{disabled ? 'Preparing PDF...' : 'Upload PDF'}</span>
-        <small>Drop a file or choose from your computer</small>
+        <UploadCloud size={variant === 'hero' ? 30 : 24} />
+        <span>
+          {disabled
+            ? 'Preparing your PDF...'
+            : variant === 'hero'
+              ? 'Drop a PDF to begin'
+              : 'Upload PDF'}
+        </span>
+        <small>
+          {variant === 'hero'
+            ? 'Or click to choose from your computer'
+            : 'Drop a file or choose from your computer'}
+        </small>
       </button>
       <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={pickFile} />
     </>

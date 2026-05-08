@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Mail, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import LabyrinthMark from './LabyrinthMark';
 
 type AuthMode = 'sign-in' | 'sign-up';
 
@@ -46,12 +47,12 @@ export default function AuthScreen({ onCancel }: AuthScreenProps) {
           </button>
         ) : null}
         <div className="crest">
-          <BookOpen size={28} />
+          <LabyrinthMark size={36} />
         </div>
         <p className="eyebrow">Ariadne Reader</p>
-        <h1>A calm path through dense documents.</h1>
+        <h1>Sync your reading.</h1>
         <p className="muted">
-          Sign in to sync PDFs, progress, chapters, deadlines, and reading time across browsers.
+          One account keeps your PDFs, progress, chapters, deadlines, and reading time aligned across every browser.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>

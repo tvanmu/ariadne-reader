@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { AlertTriangle, Archive, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { calculateFileHash } from '../services/fileHash';
 import { getPdfPageCount } from '../services/pdfMetadata';
@@ -10,7 +10,6 @@ import {
   deleteLocalProject,
   fetchLocalProjects,
 } from '../services/localProjects';
-import EmptyState from './EmptyState';
 import ProjectCard from './ProjectCard';
 import UploadDropzone from './UploadDropzone';
 
@@ -34,6 +33,7 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
   const [error, setError] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
+  const [celebratingId, setCelebratingId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadProjects();
@@ -127,10 +127,7 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
         totalPages: pending.totalPages,
       });
 
-      setProjects((current) => [project, ...current]);
-      setPendingUpload(null);
-      setUploadMessage(null);
-      onOpenProject(project.id);
+      celebrateAndOpen(project);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save this PDF.');
     } finally {
@@ -158,15 +155,22 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
         totalPages: pending.totalPages,
       });
 
-      setProjects((current) => [project, ...current]);
-      setPendingUpload(null);
-      setUploadMessage(null);
-      onOpenProject(project.id);
+      celebrateAndOpen(project);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save this PDF.');
     } finally {
       setUploading(false);
     }
+  }
+
+  function celebrateAndOpen(project: PDFProject) {
+    setProjects((current) => [project, ...current]);
+    setPendingUpload(null);
+    setUploadMessage(null);
+    setCelebratingId(project.id);
+    window.setTimeout(() => {
+      onOpenProject(project.id);
+    }, 520);
   }
 
   async function handleDelete(project: PDFProject) {
@@ -190,30 +194,30 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
     }
   }
 
+  const showShelf = !loading && sortedProjects.length > 0;
+  const showEmptyHint = !loading && sortedProjects.length === 0;
+
   return (
     <section className="dashboard">
       <div className="dashboard-hero">
-        <div className="dashboard-hero-copy">
-          <p className="eyebrow">Reading library</p>
-          <h1>Your reading projects</h1>
-          <p className="muted">
-            {storageMode === 'cloud'
-              ? 'Upload a PDF once. Ariadne keeps its file, page, deadline, chapters, and reading time synced to your account.'
-              : 'Upload a PDF and start reading immediately. Ariadne tracks your page, progress, reading time, and deadline as you read. Your local library stays in this browser; sign in later for cloud sync.'}
+        <p className="hero-eyebrow">A thread through every PDF</p>
+        <h1 className="hero-headline">A clear path through dense documents.</h1>
+        <p className="hero-sub">
+          {storageMode === 'cloud'
+            ? 'Drop a PDF and Ariadne keeps your page, deadline, chapters, and reading time synced to your account.'
+            : 'Drop a PDF and start reading. Progress saves to this browser — sign in any time to sync.'}
+        </p>
+        <UploadDropzone onUpload={handleUpload} disabled={uploading} variant="hero" />
+        {showEmptyHint && storageMode === 'local' ? (
+          <p className="hero-foot">
+            No account needed.{' '}
+            <button className="inline-link" type="button" onClick={onSignIn}>
+              Sign in to sync
+            </button>{' '}
+            when you're ready.
           </p>
-        </div>
-        <UploadDropzone onUpload={handleUpload} disabled={uploading} />
+        ) : null}
       </div>
-
-      {storageMode === 'local' ? (
-        <div className="notice info">
-          <ShieldCheck size={18} />
-          <span>No account required. Ariadne saves this browser's reading projects locally; sign in when you want cloud sync.</span>
-          <button className="small-button" type="button" onClick={onSignIn}>
-            Sign in to sync
-          </button>
-        </div>
-      ) : null}
 
       {uploadMessage ? (
         <div className="notice warning">
@@ -253,41 +257,37 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
         </div>
       ) : null}
 
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Reading shelf</p>
-          <h2>Documents in progress</h2>
-        </div>
-        <button className="icon-text-button subtle" type="button" onClick={loadProjects}>
-          <RefreshCw size={16} />
-          Refresh
-        </button>
-      </div>
-
       {loading ? (
         <div className="loading-grid">
           <div className="project-skeleton" />
           <div className="project-skeleton" />
           <div className="project-skeleton" />
         </div>
-      ) : sortedProjects.length === 0 ? (
-        <EmptyState
-          icon={<Archive size={30} />}
-          title="Upload a PDF and Ariadne will keep your place."
-          body="Your first document becomes a reading project immediately, with progress saved as you read."
-        />
-      ) : (
-        <div className="project-grid">
-          {sortedProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onOpen={() => onOpenProject(project.id)}
-              onDelete={() => handleDelete(project)}
-            />
-          ))}
-        </div>
-      )}
+      ) : null}
+
+      {showShelf ? (
+        <>
+          <div className="section-heading">
+            <h2>Your library</h2>
+            <button className="icon-text-button subtle" type="button" onClick={loadProjects}>
+              <RefreshCw size={15} />
+              Refresh
+            </button>
+          </div>
+
+          <div className="project-grid">
+            {sortedProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                celebrating={celebratingId === project.id}
+                onOpen={() => onOpenProject(project.id)}
+                onDelete={() => handleDelete(project)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }
