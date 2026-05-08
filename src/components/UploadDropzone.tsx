@@ -65,7 +65,7 @@ export default function UploadDropzone({ disabled, variant = 'default', onUpload
           {disabled
             ? 'Preparing your PDF...'
             : variant === 'hero'
-              ? 'Drop a PDF to begin'
+              ? 'Drop a PDF to add it to your library'
               : 'Upload PDF'}
         </span>
         <small>

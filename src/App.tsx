@@ -74,7 +74,7 @@ export default function App() {
           <LabyrinthMark size={36} />
           <span>
             <strong>Ariadne Reader</strong>
-            <small>A clear path through dense PDFs.</small>
+            <small>Structured reading for serious PDFs.</small>
           </span>
         </button>
 

@@ -205,7 +205,7 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
         <p className="hero-sub">
           {storageMode === 'cloud'
             ? 'Drop a PDF and Ariadne keeps your page, deadline, chapters, and reading time synced to your account.'
-            : 'Drop a PDF and start reading. Progress saves to this browser — sign in any time to sync.'}
+            : 'Drop a PDF and start reading. Ariadne saves your place in this browser — sign in anytime to sync.'}
         </p>
         <UploadDropzone onUpload={handleUpload} disabled={uploading} variant="hero" />
         {showEmptyHint && storageMode === 'local' ? (
