@@ -422,6 +422,15 @@ h3 {
   box-shadow: var(--shadow);
 }
 
+.dashboard-hero-copy {
+  max-width: 860px;
+}
+
+.dashboard-hero-copy .muted {
+  max-width: 920px;
+  font-size: 17px;
+}
+
 .upload-dropzone {
   display: grid;
   place-items: center;

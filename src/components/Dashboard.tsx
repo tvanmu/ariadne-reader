@@ -193,13 +193,13 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
   return (
     <section className="dashboard">
       <div className="dashboard-hero">
-        <div>
-          <p className="eyebrow">Library</p>
+        <div className="dashboard-hero-copy">
+          <p className="eyebrow">Reading library</p>
           <h1>Your reading projects</h1>
           <p className="muted">
             {storageMode === 'cloud'
-              ? 'Upload a PDF once. Ariadne keeps its file, page, deadline, chapters, and reading time in sync with your account.'
-              : 'Upload a PDF and start reading immediately. Your local library stays in this browser; sign in later when you want cloud sync.'}
+              ? 'Upload a PDF once. Ariadne keeps its file, page, deadline, chapters, and reading time synced to your account.'
+              : 'Upload a PDF and start reading immediately. Ariadne tracks your page, progress, reading time, and deadline as you read. Your local library stays in this browser; sign in later for cloud sync.'}
           </p>
         </div>
         <UploadDropzone onUpload={handleUpload} disabled={uploading} />
@@ -208,7 +208,7 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
       {storageMode === 'local' ? (
         <div className="notice info">
           <ShieldCheck size={18} />
-          <span>Local mode: no account required. Sign in later to sync across browsers.</span>
+          <span>No account required. Ariadne saves this browser's reading projects locally; sign in when you want cloud sync.</span>
           <button className="small-button" type="button" onClick={onSignIn}>
             Sign in to sync
           </button>
@@ -255,7 +255,7 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
 
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Projects</p>
+          <p className="eyebrow">Reading shelf</p>
           <h2>Documents in progress</h2>
         </div>
         <button className="icon-text-button subtle" type="button" onClick={loadProjects}>
@@ -273,8 +273,8 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
       ) : sortedProjects.length === 0 ? (
         <EmptyState
           icon={<Archive size={30} />}
-          title="Upload a PDF and Ariadne will remember the path through it."
-          body="Your library is empty. The first uploaded PDF becomes a reading project immediately."
+          title="Upload a PDF and Ariadne will keep your place."
+          body="Your first document becomes a reading project immediately, with progress saved as you read."
         />
       ) : (
         <div className="project-grid">

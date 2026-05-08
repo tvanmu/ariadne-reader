@@ -68,7 +68,7 @@ export default function App() {
           <span className="wordmark-mark" aria-hidden="true" />
           <span>
             <strong>Ariadne Reader</strong>
-            <small>A thread through every PDF.</small>
+            <small>A clear path through dense PDFs.</small>
           </span>
         </button>
 
