@@ -9,6 +9,10 @@ interface AuthScreenProps {
   onCancel?: () => void;
 }
 
+function getAuthRedirectUrl() {
+  return new URL('/', window.location.origin).toString();
+}
+
 export default function AuthScreen({ onCancel }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
@@ -26,7 +30,13 @@ export default function AuthScreen({ onCancel }: AuthScreenProps) {
     const result =
       mode === 'sign-in'
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+        : await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: getAuthRedirectUrl(),
+            },
+          });
 
     if (result.error) {
       setError(result.error.message);
