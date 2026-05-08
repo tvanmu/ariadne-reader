@@ -34,6 +34,16 @@ const MAX_CANVAS_OUTPUT_SCALE = 3;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP_PERCENT = 10;
+const PAGE_RENDER_RADIUS = 2;
+const DEFAULT_PAGE_SIZE: PageSize = {
+  width: 826,
+  height: 1069,
+};
+
+interface PageSize {
+  width: number;
+  height: number;
+}
 
 interface PdfReaderProps {
   projectId: string;
@@ -52,6 +62,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [pageInput, setPageInput] = useState('1');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [sessionSeconds, setSessionSeconds] = useState(0);
+  const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -65,6 +76,21 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     () => (project ? calculateProgress(currentPage, project.totalPages) : 0),
     [currentPage, project],
   );
+  const renderedPageNumbers = useMemo(() => {
+    if (!pdfDocument) {
+      return new Set<number>();
+    }
+
+    const pageNumbers = new Set<number>();
+    const startPage = Math.max(currentPage - PAGE_RENDER_RADIUS, 1);
+    const endPage = Math.min(currentPage + PAGE_RENDER_RADIUS, pdfDocument.numPages);
+
+    for (let pageNumber = startPage; pageNumber <= endPage; pageNumber += 1) {
+      pageNumbers.add(pageNumber);
+    }
+
+    return pageNumbers;
+  }, [currentPage, pdfDocument]);
 
   useEffect(() => {
     projectRef.current = project;
@@ -110,6 +136,13 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           return;
         }
 
+        const measuredPageSizes = await readPageSizes(loadedDocument);
+        if (!active) {
+          await loadedDocument.destroy();
+          return;
+        }
+
+        setPageSizes(measuredPageSizes);
         setPdfDocument(loadedDocument);
       } catch (caught) {
         setError(
@@ -374,9 +407,11 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
               const pageNumber = index + 1;
               return (
                 <PdfPage
-                  key={`${pageNumber}-${zoom}`}
+                  key={pageNumber}
                   document={pdfDocument}
                   pageNumber={pageNumber}
+                  pageSize={pageSizes[pageNumber] ?? DEFAULT_PAGE_SIZE}
+                  shouldRender={renderedPageNumbers.has(pageNumber)}
                   zoom={zoom}
                   registerPage={(node) => {
                     if (node) {
@@ -404,13 +439,17 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 interface PdfPageProps {
   document: PdfDocument;
   pageNumber: number;
+  pageSize: PageSize;
+  shouldRender: boolean;
   zoom: number;
   registerPage: (node: HTMLDivElement | null) => void;
 }
 
-function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
+function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerPage }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const displayWidth = Math.ceil(pageSize.width * zoom);
+  const displayHeight = Math.ceil(pageSize.height * zoom);
 
   useEffect(() => {
     let cancelled = false;
@@ -418,7 +457,7 @@ function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
 
     async function renderPage() {
       const canvas = canvasRef.current;
-      if (!canvas) {
+      if (!canvas || !shouldRender) {
         return;
       }
 
@@ -437,13 +476,13 @@ function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
         }
 
         const outputScale = getCanvasOutputScale();
-        const displayWidth = Math.ceil(viewport.width);
-        const displayHeight = Math.ceil(viewport.height);
+        const canvasDisplayWidth = Math.ceil(viewport.width);
+        const canvasDisplayHeight = Math.ceil(viewport.height);
 
-        canvas.width = Math.ceil(displayWidth * outputScale);
-        canvas.height = Math.ceil(displayHeight * outputScale);
-        canvas.style.width = `${displayWidth}px`;
-        canvas.style.height = `${displayHeight}px`;
+        canvas.width = Math.ceil(canvasDisplayWidth * outputScale);
+        canvas.height = Math.ceil(canvasDisplayHeight * outputScale);
+        canvas.style.width = `${canvasDisplayWidth}px`;
+        canvas.style.height = `${canvasDisplayHeight}px`;
 
         context.setTransform(1, 0, 0, 1, 0, 0);
         context.clearRect(0, 0, canvas.width, canvas.height);
@@ -466,15 +505,38 @@ function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [document, pageNumber, zoom]);
+  }, [document, pageNumber, shouldRender, zoom]);
 
   return (
     <div className="pdf-page-frame" ref={registerPage}>
       <div className="page-number-label">Page {pageNumber}</div>
       {renderError ? <p className="form-note error">{renderError}</p> : null}
-      <canvas ref={canvasRef} />
+      <div className="pdf-page-shell" style={{ width: displayWidth, height: displayHeight }}>
+        {shouldRender ? <canvas ref={canvasRef} /> : <div className="pdf-page-placeholder" />}
+      </div>
     </div>
   );
+}
+
+async function readPageSizes(document: PdfDocument): Promise<Record<number, PageSize>> {
+  const entries = await Promise.all(
+    Array.from({ length: document.numPages }, async (_, index) => {
+      const pageNumber = index + 1;
+      const page = await document.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: PDF_BASE_SCALE });
+      page.cleanup();
+
+      return [
+        pageNumber,
+        {
+          width: Math.ceil(viewport.width),
+          height: Math.ceil(viewport.height),
+        },
+      ] as const;
+    }),
+  );
+
+  return Object.fromEntries(entries);
 }
 
 function getCanvasOutputScale(): number {
