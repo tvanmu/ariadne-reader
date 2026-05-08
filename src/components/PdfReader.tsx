@@ -28,6 +28,13 @@ import ReadingStats from './ReadingStats';
 
 type PdfDocument = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>;
 
+const PDF_BASE_SCALE = 1.35;
+const MIN_CANVAS_OUTPUT_SCALE = 2.5;
+const MAX_CANVAS_OUTPUT_SCALE = 3;
+const MIN_ZOOM = 0.6;
+const MAX_ZOOM = 2.4;
+const ZOOM_STEP_PERCENT = 10;
+
 interface PdfReaderProps {
   projectId: string;
   storageMode: 'local' | 'cloud';
@@ -346,8 +353,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onJump={() => scrollToPage(Number(pageInput))}
         onPrevious={() => scrollToPage(currentPage - 1)}
         onNext={() => scrollToPage(currentPage + 1)}
-        onZoomIn={() => setZoom((value) => Math.min(value + 0.15, 2.4))}
-        onZoomOut={() => setZoom((value) => Math.max(value - 0.15, 0.65))}
+        onZoomIn={() => setZoom((value) => getSteppedZoom(value, 'in'))}
+        onZoomOut={() => setZoom((value) => getSteppedZoom(value, 'out'))}
         onResetZoom={() => setZoom(1)}
       />
 
@@ -422,21 +429,29 @@ function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
           return;
         }
 
-        const viewport = page.getViewport({ scale: zoom * 1.35 });
+        const viewport = page.getViewport({ scale: zoom * PDF_BASE_SCALE });
         const context = canvas.getContext('2d');
 
         if (!context) {
           throw new Error('Canvas rendering is not available in this browser.');
         }
 
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2.5);
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        const outputScale = getCanvasOutputScale();
+        const displayWidth = Math.ceil(viewport.width);
+        const displayHeight = Math.ceil(viewport.height);
+
+        canvas.width = Math.ceil(displayWidth * outputScale);
+        canvas.height = Math.ceil(displayHeight * outputScale);
+        canvas.style.width = `${displayWidth}px`;
+        canvas.style.height = `${displayHeight}px`;
+
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
         context.setTransform(outputScale, 0, 0, outputScale, 0, 0);
 
-        renderTask = page.render({ canvasContext: context, viewport });
+        renderTask = page.render({ canvasContext: context, viewport, background: '#ffffff' });
         await renderTask.promise;
       } catch (caught) {
         if (!cancelled && !(caught instanceof Error && caught.name === 'RenderingCancelledException')) {
@@ -460,4 +475,21 @@ function PdfPage({ document, pageNumber, zoom, registerPage }: PdfPageProps) {
       <canvas ref={canvasRef} />
     </div>
   );
+}
+
+function getCanvasOutputScale(): number {
+  return Math.min(
+    Math.max(window.devicePixelRatio || 1, MIN_CANVAS_OUTPUT_SCALE),
+    MAX_CANVAS_OUTPUT_SCALE,
+  );
+}
+
+function getSteppedZoom(value: number, direction: 'in' | 'out'): number {
+  const currentPercent = Math.round(value * 100);
+  const nextPercent =
+    direction === 'in'
+      ? Math.ceil((currentPercent + 1) / ZOOM_STEP_PERCENT) * ZOOM_STEP_PERCENT
+      : Math.floor((currentPercent - 1) / ZOOM_STEP_PERCENT) * ZOOM_STEP_PERCENT;
+
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextPercent / 100));
 }
