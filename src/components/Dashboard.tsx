@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { AlertTriangle, Archive, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Archive, RefreshCw, ShieldCheck } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { calculateFileHash } from '../services/fileHash';
 import { getPdfPageCount } from '../services/pdfMetadata';
 import { createProjectFromPdf, deleteCloudProject, fetchProjects } from '../services/projects';
+import {
+  createLocalProjectFromPdf,
+  deleteLocalProject,
+  fetchLocalProjects,
+} from '../services/localProjects';
 import EmptyState from './EmptyState';
 import ProjectCard from './ProjectCard';
 import UploadDropzone from './UploadDropzone';
 
 interface DashboardProps {
-  user: User;
+  user: User | null;
+  storageMode: 'local' | 'cloud';
   onOpenProject: (projectId: string) => void;
+  onSignIn: () => void;
 }
 
 interface PendingUpload {
@@ -20,7 +27,7 @@ interface PendingUpload {
   totalPages: number;
 }
 
-export default function Dashboard({ user, onOpenProject }: DashboardProps) {
+export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }: DashboardProps) {
   const [projects, setProjects] = useState<PDFProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -30,7 +37,7 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
 
   useEffect(() => {
     void loadProjects();
-  }, [user.id]);
+  }, [storageMode, user?.id]);
 
   const sortedProjects = useMemo(
     () =>
@@ -49,7 +56,8 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
     setError(null);
 
     try {
-      const nextProjects = await fetchProjects(user.id);
+      const nextProjects =
+        storageMode === 'cloud' && user ? await fetchProjects(user.id) : await fetchLocalProjects();
       setProjects(nextProjects);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load your library.');
@@ -91,7 +99,7 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
         return;
       }
 
-      await createAndOpenProject(nextPendingUpload);
+      await createAndOpenProjectForMode(nextPendingUpload);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -108,8 +116,43 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
     setError(null);
 
     try {
+      if (!user) {
+        throw new Error('Sign in is required before saving to cloud sync.');
+      }
+
       const project = await createProjectFromPdf({
         userId: user.id,
+        file: pending.file,
+        fileHash: pending.fileHash,
+        totalPages: pending.totalPages,
+      });
+
+      setProjects((current) => [project, ...current]);
+      setPendingUpload(null);
+      setUploadMessage(null);
+      onOpenProject(project.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save this PDF.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function createAndOpenProjectForMode(pending: PendingUpload) {
+    if (storageMode === 'cloud') {
+      await createAndOpenProject(pending);
+      return;
+    }
+
+    await createLocalAndOpenProject(pending);
+  }
+
+  async function createLocalAndOpenProject(pending: PendingUpload) {
+    setUploading(true);
+    setError(null);
+
+    try {
+      const project = await createLocalProjectFromPdf({
         file: pending.file,
         fileHash: pending.fileHash,
         totalPages: pending.totalPages,
@@ -136,7 +179,11 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
     setError(null);
 
     try {
-      await deleteCloudProject(project);
+      if (storageMode === 'cloud') {
+        await deleteCloudProject(project);
+      } else {
+        await deleteLocalProject(project);
+      }
       setProjects((current) => current.filter((item) => item.id !== project.id));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not delete this project.');
@@ -150,12 +197,23 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
           <p className="eyebrow">Library</p>
           <h1>Your reading projects</h1>
           <p className="muted">
-            Upload a PDF once. Ariadne keeps its file, page, deadline, chapters, and reading time in
-            sync with your account.
+            {storageMode === 'cloud'
+              ? 'Upload a PDF once. Ariadne keeps its file, page, deadline, chapters, and reading time in sync with your account.'
+              : 'Upload a PDF and start reading immediately. Your local library stays in this browser; sign in later when you want cloud sync.'}
           </p>
         </div>
         <UploadDropzone onUpload={handleUpload} disabled={uploading} />
       </div>
+
+      {storageMode === 'local' ? (
+        <div className="notice info">
+          <ShieldCheck size={18} />
+          <span>Local mode: no account required. Sign in later to sync across browsers.</span>
+          <button className="small-button" type="button" onClick={onSignIn}>
+            Sign in to sync
+          </button>
+        </div>
+      ) : null}
 
       {uploadMessage ? (
         <div className="notice warning">
@@ -166,7 +224,11 @@ export default function Dashboard({ user, onOpenProject }: DashboardProps) {
               className="small-button"
               type="button"
               disabled={uploading}
-              onClick={() => createAndOpenProject(pendingUpload)}
+              onClick={() =>
+                storageMode === 'cloud'
+                  ? createAndOpenProject(pendingUpload)
+                  : createLocalAndOpenProject(pendingUpload)
+              }
             >
               Upload anyway
             </button>

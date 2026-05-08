@@ -75,6 +75,10 @@ input {
   place-items: center;
 }
 
+.auth-shell {
+  min-height: calc(100vh - 116px);
+}
+
 .global-header {
   position: sticky;
   top: 0;
@@ -307,6 +311,11 @@ h3 {
   color: var(--gold);
 }
 
+.back-text-button {
+  margin: 0 0 22px;
+  gap: 6px;
+}
+
 .small-button {
   min-height: 34px;
   padding: 0 12px;
@@ -467,6 +476,10 @@ h3 {
 
 .notice.warning {
   color: #e2c98b;
+}
+
+.notice.info {
+  color: var(--ivory-dim);
 }
 
 .section-heading {

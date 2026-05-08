@@ -11,6 +11,14 @@ import {
   updateCloudProgress,
   updateCloudReadingTime,
 } from '../services/projects';
+import {
+  fetchLocalProject,
+  getLocalPdfBlob,
+  updateLocalChapters,
+  updateLocalDeadline,
+  updateLocalProgress,
+  updateLocalReadingTime,
+} from '../services/localProjects';
 import { calculateProgress, clampPage } from '../utils/progress';
 import ChapterPanel from './ChapterPanel';
 import DeadlineEditor from './DeadlineEditor';
@@ -22,10 +30,11 @@ type PdfDocument = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>;
 
 interface PdfReaderProps {
   projectId: string;
+  storageMode: 'local' | 'cloud';
   onBack: () => void;
 }
 
-export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
+export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderProps) {
   const [project, setProject] = useState<PDFProject | null>(null);
   const [pdfDocument, setPdfDocument] = useState<PdfDocument | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,7 +76,8 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
       setError(null);
 
       try {
-        const loadedProject = await fetchProject(projectId);
+        const loadedProject =
+          storageMode === 'cloud' ? await fetchProject(projectId) : await fetchLocalProject(projectId);
         if (!active) {
           return;
         }
@@ -79,7 +89,11 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
         setZoom(loadedProject.zoom);
 
         const cachedBlob = await getPdfBlob(loadedProject.blobKey);
-        const pdfBlob = cachedBlob ?? (await downloadPdfBlob(loadedProject));
+        const pdfBlob =
+          cachedBlob ??
+          (storageMode === 'cloud'
+            ? await downloadPdfBlob(loadedProject)
+            : await getLocalPdfBlob(loadedProject));
         const buffer = await pdfBlob.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
         loadedDocument = await loadingTask.promise;
@@ -111,7 +125,7 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
         void loadedDocument.destroy();
       }
     };
-  }, [projectId]);
+  }, [projectId, storageMode]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -135,14 +149,17 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
     const total = activeProject.totalReadingSeconds + delta;
 
     try {
-      const updatedProject = await updateCloudReadingTime(activeProject, total);
+      const updatedProject =
+        storageMode === 'cloud'
+          ? await updateCloudReadingTime(activeProject, total)
+          : await updateLocalReadingTime(activeProject, total);
       setProject((current) =>
         current ? { ...current, totalReadingSeconds: updatedProject.totalReadingSeconds } : current,
       );
     } catch {
       lastReadingSyncRef.current -= delta;
     }
-  }, []);
+  }, [storageMode]);
 
   useEffect(() => {
     if (sessionSeconds > 0 && sessionSeconds % 15 === 0) {
@@ -191,11 +208,18 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
       setSaveState('saving');
 
       try {
-        const updatedProject = await updateCloudProgress(activeProject, {
-          currentPage,
-          scrollOffset,
-          zoom,
-        });
+        const updatedProject =
+          storageMode === 'cloud'
+            ? await updateCloudProgress(activeProject, {
+                currentPage,
+                scrollOffset,
+                zoom,
+              })
+            : await updateLocalProgress(activeProject, {
+                currentPage,
+                scrollOffset,
+                zoom,
+              });
 
         setProject((current) =>
           current
@@ -219,7 +243,7 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [currentPage, pdfDocument, project, scrollOffset, zoom]);
+  }, [currentPage, pdfDocument, project, scrollOffset, storageMode, zoom]);
 
   function scrollToPage(page: number, behavior: ScrollBehavior = 'smooth') {
     const nextPage = project ? clampPage(page, project.totalPages) : page;
@@ -266,7 +290,10 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
       return;
     }
 
-    const updatedProject = await updateCloudDeadline(project, deadline);
+    const updatedProject =
+      storageMode === 'cloud'
+        ? await updateCloudDeadline(project, deadline)
+        : await updateLocalDeadline(project, deadline);
     setProject(updatedProject);
   }
 
@@ -275,7 +302,10 @@ export default function PdfReader({ projectId, onBack }: PdfReaderProps) {
       return;
     }
 
-    const updatedProject = await updateCloudChapters(project, chapters);
+    const updatedProject =
+      storageMode === 'cloud'
+        ? await updateCloudChapters(project, chapters)
+        : await updateLocalChapters(project, chapters);
     setProject(updatedProject);
   }
 

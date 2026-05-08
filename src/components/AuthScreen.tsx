@@ -1,10 +1,14 @@
 import { FormEvent, useState } from 'react';
-import { ArrowRight, BookOpen, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Mail, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type AuthMode = 'sign-in' | 'sign-up';
 
-export default function AuthScreen() {
+interface AuthScreenProps {
+  onCancel?: () => void;
+}
+
+export default function AuthScreen({ onCancel }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,8 +37,14 @@ export default function AuthScreen() {
   }
 
   return (
-    <main className="app-shell auth-shell">
+    <section className="auth-shell">
       <section className="auth-panel">
+        {onCancel ? (
+          <button className="text-button back-text-button" type="button" onClick={onCancel}>
+            <ArrowLeft size={15} />
+            Continue locally
+          </button>
+        ) : null}
         <div className="crest">
           <BookOpen size={28} />
         </div>
@@ -95,6 +105,6 @@ export default function AuthScreen() {
           {mode === 'sign-in' ? 'Need an account?' : 'Already have an account?'}
         </button>
       </section>
-    </main>
+    </section>
   );
 }

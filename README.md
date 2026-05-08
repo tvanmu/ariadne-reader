@@ -7,11 +7,14 @@ Tagline: "A thread through every PDF."
 ## Current architecture
 
 - React + TypeScript + Vite for the frontend.
-- Supabase Auth for accounts.
-- Supabase Postgres for PDF project metadata, progress, deadlines, and chapters.
-- Supabase Storage for private PDF files.
-- IndexedDB, through Dexie, as a local cache.
+- IndexedDB, through Dexie, for local-first reading projects.
+- Supabase Auth for optional accounts.
+- Supabase Postgres for synced PDF project metadata, progress, deadlines, and chapters.
+- Supabase Storage for synced private PDF files.
 - PDF.js for in-browser PDF rendering.
+
+The first-use flow is local-first: readers can upload and read a PDF without creating an account.
+Signing in is the path to cloud sync, not a requirement for trying the product.
 
 ## Local setup
 

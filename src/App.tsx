@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { BookOpen, LogOut } from 'lucide-react';
+import { BookOpen, LogIn, LogOut } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
-import ConfigMissing from './components/ConfigMissing';
 import Dashboard from './components/Dashboard';
 import PdfReader from './components/PdfReader';
+
+type StorageMode = 'local' | 'cloud';
+
+interface ActiveProject {
+  id: string;
+  storageMode: StorageMode;
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -25,8 +32,9 @@ export default function App() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      setShowAuth(false);
       if (!nextSession) {
-        setActiveProjectId(null);
+        setActiveProject(null);
       }
     });
 
@@ -34,10 +42,6 @@ export default function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
-
-  if (!isSupabaseConfigured) {
-    return <ConfigMissing />;
-  }
 
   if (!authReady) {
     return (
@@ -50,9 +54,7 @@ export default function App() {
     );
   }
 
-  if (!session?.user) {
-    return <AuthScreen />;
-  }
+  const storageMode: StorageMode = session?.user ? 'cloud' : 'local';
 
   return (
     <main className="app-shell">
@@ -60,7 +62,7 @@ export default function App() {
         <button
           className="wordmark-button"
           type="button"
-          onClick={() => setActiveProjectId(null)}
+          onClick={() => setActiveProject(null)}
           aria-label="Return to dashboard"
         >
           <span className="wordmark-mark" aria-hidden="true" />
@@ -70,20 +72,38 @@ export default function App() {
           </span>
         </button>
 
-        <button
-          className="icon-text-button subtle"
-          type="button"
-          onClick={() => supabase.auth.signOut()}
-        >
-          <LogOut size={16} />
-          Sign out
-        </button>
+        {session?.user ? (
+          <button
+            className="icon-text-button subtle"
+            type="button"
+            onClick={() => supabase.auth.signOut()}
+          >
+            <LogOut size={16} />
+            Sign out
+          </button>
+        ) : (
+          <button className="icon-text-button subtle" type="button" onClick={() => setShowAuth(true)}>
+            <LogIn size={16} />
+            Sign in to sync
+          </button>
+        )}
       </header>
 
-      {activeProjectId ? (
-        <PdfReader projectId={activeProjectId} onBack={() => setActiveProjectId(null)} />
+      {showAuth && !session?.user ? (
+        <AuthScreen onCancel={() => setShowAuth(false)} />
+      ) : activeProject ? (
+        <PdfReader
+          projectId={activeProject.id}
+          storageMode={activeProject.storageMode}
+          onBack={() => setActiveProject(null)}
+        />
       ) : (
-        <Dashboard user={session.user} onOpenProject={setActiveProjectId} />
+        <Dashboard
+          user={session?.user ?? null}
+          storageMode={storageMode}
+          onOpenProject={(projectId) => setActiveProject({ id: projectId, storageMode })}
+          onSignIn={() => setShowAuth(true)}
+        />
       )}
     </main>
   );
