@@ -1,5 +1,4 @@
 import { ChangeEvent, DragEvent, useRef, useState } from 'react';
-import { UploadCloud } from 'lucide-react';
 
 interface UploadDropzoneProps {
   disabled: boolean;
@@ -60,7 +59,7 @@ export default function UploadDropzone({ disabled, variant = 'default', onUpload
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
       >
-        <UploadCloud size={variant === 'hero' ? 30 : 24} />
+        <i className="drop-thread" aria-hidden="true" />
         <span>
           {disabled
             ? 'Preparing your PDF...'

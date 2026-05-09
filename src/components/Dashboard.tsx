@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { AlertTriangle, BookOpenCheck, Clock3, Cloud, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { calculateFileHash } from '../services/fileHash';
 import { getPdfPageCount } from '../services/pdfMetadata';
@@ -35,20 +34,10 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
   const [celebratingId, setCelebratingId] = useState<string | null>(null);
-  const heroRevealFrameRef = useRef<number | null>(null);
-  const pendingHeroRevealRef = useRef<{ node: HTMLElement; x: number; y: number } | null>(null);
 
   useEffect(() => {
     void loadProjects();
   }, [storageMode, user?.id]);
-
-  useEffect(() => {
-    return () => {
-      if (heroRevealFrameRef.current !== null) {
-        window.cancelAnimationFrame(heroRevealFrameRef.current);
-      }
-    };
-  }, []);
 
   const sortedProjects = useMemo(
     () =>
@@ -61,7 +50,6 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
         ),
     [projects],
   );
-
   async function loadProjects() {
     setLoading(true);
     setError(null);
@@ -208,124 +196,34 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
   const showShelf = !loading && sortedProjects.length > 0;
   const showEmptyHint = !loading && sortedProjects.length === 0;
 
-  function updateHeroReveal(event: PointerEvent<HTMLElement>) {
-    if (event.pointerType === 'touch') {
-      return;
-    }
-
-    const node = event.currentTarget;
-    const rect = node.getBoundingClientRect();
-
-    pendingHeroRevealRef.current = {
-      node,
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-
-    if (heroRevealFrameRef.current !== null) {
-      return;
-    }
-
-    heroRevealFrameRef.current = window.requestAnimationFrame(() => {
-      const pending = pendingHeroRevealRef.current;
-      if (!pending) {
-        heroRevealFrameRef.current = null;
-        return;
-      }
-
-      pending.node.style.setProperty('--cursor-x', `${pending.x}px`);
-      pending.node.style.setProperty('--cursor-y', `${pending.y}px`);
-      pending.node.dataset.reveal = 'active';
-      heroRevealFrameRef.current = null;
-    });
-  }
-
-  function hideHeroReveal(event: PointerEvent<HTMLElement>) {
-    pendingHeroRevealRef.current = null;
-    if (heroRevealFrameRef.current !== null) {
-      window.cancelAnimationFrame(heroRevealFrameRef.current);
-      heroRevealFrameRef.current = null;
-    }
-    event.currentTarget.dataset.reveal = 'idle';
-  }
-
   return (
-    <section className="dashboard">
-      <div
-        className="dashboard-hero"
-        data-reveal="idle"
-        onPointerEnter={updateHeroReveal}
-        onPointerMove={updateHeroReveal}
-        onPointerLeave={hideHeroReveal}
-      >
-        <div className="hero-maze-reveal" aria-hidden="true">
-          <svg viewBox="0 0 1200 760" preserveAspectRatio="none">
-            <path
-              className="maze-secondary"
-              d="M120 145H335V235H245V325H425V205H590V295H510V415H700V235H905V145H1080"
-            />
-            <path
-              className="maze-secondary"
-              d="M95 610H250V520H380V610H545V500H650V590H810V470H965V560H1105"
-            />
-            <path
-              className="maze-primary"
-              d="M175 380H315V300H215V205H455V145H625V225H765V330H670V430H875V300H1018V402H930V505H1070"
-            />
-            <path
-              className="maze-primary"
-              d="M150 500H280V420H420V330H545V455H485V565H705V455H840V365H955"
-            />
-            <path
-              className="maze-faint"
-              d="M70 255H165V340H85M1120 265H1010V350H1118M350 95V175M850 95V230M350 665V585M850 665V565"
-            />
-          </svg>
+    <div className="dashboard">
+      <div className="dashboard-hero">
+        <div className="hero-copy">
+          <h1 className="hero-headline">A clear path through dense documents.</h1>
+          <div
+            className="hero-summary"
+            aria-label="Keep your page, chapters, deadline, and reading time in one quiet place."
+          >
+            <div className="summary-thread" aria-hidden="true">
+              <span>Page</span>
+              <span>Chapters</span>
+              <span>Deadline</span>
+              <span>Reading time</span>
+            </div>
+            <p>kept in one quiet place</p>
+          </div>
+          <UploadDropzone onUpload={handleUpload} disabled={uploading} variant="hero" />
+          {showEmptyHint && storageMode === 'local' ? (
+            <p className="hero-foot">
+              No account needed.{' '}
+              <button className="inline-link" type="button" onClick={onSignIn}>
+                Sign in to sync
+              </button>{' '}
+              when you're ready.
+            </p>
+          ) : null}
         </div>
-        <p className="hero-eyebrow">A thread through every PDF</p>
-        <h1 className="hero-headline">A clear path through dense documents.</h1>
-        <p className="hero-sub">
-          {storageMode === 'cloud'
-            ? 'Drop a PDF and Ariadne keeps your page, deadline, chapters, and reading time synced to your account.'
-            : 'Drop a PDF and start reading. Ariadne saves your place in this browser — sign in anytime to sync.'}
-        </p>
-        <UploadDropzone onUpload={handleUpload} disabled={uploading} variant="hero" />
-        <div className="hero-assurance" aria-label="Ariadne Reader benefits">
-          <div className="hero-assurance-item">
-            <BookOpenCheck size={16} />
-            <div>
-              <strong>Resume precisely</strong>
-              <span>Page, zoom, and progress are remembered.</span>
-            </div>
-          </div>
-          <div className="hero-assurance-item">
-            <Clock3 size={16} />
-            <div>
-              <strong>Track the work</strong>
-              <span>Reading time, deadlines, and pace stay visible.</span>
-            </div>
-          </div>
-          <div className="hero-assurance-item">
-            <Cloud size={16} />
-            <div>
-              <strong>{storageMode === 'cloud' ? 'Synced library' : 'Sync when ready'}</strong>
-              <span>
-                {storageMode === 'cloud'
-                  ? 'Your projects follow your account.'
-                  : 'No account required to begin.'}
-              </span>
-            </div>
-          </div>
-        </div>
-        {showEmptyHint && storageMode === 'local' ? (
-          <p className="hero-foot">
-            No account needed.{' '}
-            <button className="inline-link" type="button" onClick={onSignIn}>
-              Sign in to sync
-            </button>{' '}
-            when you're ready.
-          </p>
-        ) : null}
       </div>
 
       {uploadMessage ? (
@@ -397,6 +295,6 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
           </div>
         </>
       ) : null}
-    </section>
+    </div>
   );
 }

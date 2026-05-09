@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { LogIn, LogOut } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
 import LabyrinthMark from './components/LabyrinthMark';
 import PdfReader from './components/PdfReader';
+import StatueLineBackdrop from './components/StatueLineBackdrop';
 
 type StorageMode = 'local' | 'cloud';
 
@@ -80,6 +80,8 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <StatueLineBackdrop />
+
       <header className="global-header">
         <button
           className="wordmark-button"
@@ -90,7 +92,6 @@ export default function App() {
           <LabyrinthMark size={36} />
           <span>
             <strong>Ariadne Reader</strong>
-            <small>Structured reading for serious PDFs.</small>
           </span>
         </button>
 
@@ -100,13 +101,11 @@ export default function App() {
             type="button"
             onClick={() => supabase.auth.signOut()}
           >
-            <LogOut size={16} />
             Sign out
           </button>
         ) : (
           <button className="icon-text-button subtle" type="button" onClick={() => setShowAuth(true)}>
-            <LogIn size={16} />
-            Sign in to sync
+            Sign in
           </button>
         )}
       </header>
