@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, BookOpen, CalendarDays, Clock, ListTree, RefreshCw } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { calculateFileHash } from '../services/fileHash';
 import { getPdfPageCount } from '../services/pdfMetadata';
@@ -25,6 +25,29 @@ interface PendingUpload {
   fileHash: string;
   totalPages: number;
 }
+
+const heroSummaryItems = [
+  {
+    label: 'Page',
+    detail: 'Resume from the exact place you stopped.',
+    Icon: BookOpen,
+  },
+  {
+    label: 'Chapters',
+    detail: 'Turn long PDFs into a readable map.',
+    Icon: ListTree,
+  },
+  {
+    label: 'Deadline',
+    detail: 'Keep the finish date in sight.',
+    Icon: CalendarDays,
+  },
+  {
+    label: 'Reading time',
+    detail: 'Know the effort before you start.',
+    Icon: Clock,
+  },
+];
 
 export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }: DashboardProps) {
   const [projects, setProjects] = useState<PDFProject[]>([]);
@@ -203,15 +226,26 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
           <h1 className="hero-headline">A clear path through dense documents.</h1>
           <div
             className="hero-summary"
-            aria-label="Keep your page, chapters, deadline, and reading time in one quiet place."
+            aria-labelledby="hero-summary-title"
           >
-            <div className="summary-thread" aria-hidden="true">
-              <span>Page</span>
-              <span>Chapters</span>
-              <span>Deadline</span>
-              <span>Reading time</span>
+            <div className="summary-intro">
+              <p id="hero-summary-title">
+                Page, chapters, deadline, and reading time stay connected.
+              </p>
             </div>
-            <p>kept in one quiet place</p>
+            <div className="summary-thread" aria-label="Reading progress tools">
+              {heroSummaryItems.map(({ label, detail, Icon }) => (
+                <div className="summary-step" key={label}>
+                  <span className="summary-icon" aria-hidden="true">
+                    <Icon size={18} strokeWidth={1.8} />
+                  </span>
+                  <span className="summary-text">
+                    <strong>{label}</strong>
+                    <span>{detail}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
           <UploadDropzone onUpload={handleUpload} disabled={uploading} variant="hero" />
           {showEmptyHint && storageMode === 'local' ? (

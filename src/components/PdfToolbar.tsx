@@ -13,7 +13,6 @@ import MazeIcon from './MazeIcon';
 
 interface PdfToolbarProps {
   title: string;
-  currentPage: number;
   totalPages: number;
   progress: number;
   zoom: number;
@@ -35,7 +34,6 @@ interface PdfToolbarProps {
 
 export default function PdfToolbar({
   title,
-  currentPage,
   totalPages,
   progress,
   zoom,
@@ -54,6 +52,8 @@ export default function PdfToolbar({
   onZoomOut,
   onResetZoom,
 }: PdfToolbarProps) {
+  const roundedProgress = Math.round(progress);
+
   return (
     <div className="reader-toolbar">
       <div className="toolbar-left">
@@ -73,11 +73,11 @@ export default function PdfToolbar({
         </button>
       </div>
 
-      <div className="toolbar-title">
+      <div className="toolbar-title" aria-label={`${title}, ${roundedProgress} percent complete`}>
         <strong>{title}</strong>
-        <small>
-          Page {currentPage} / {totalPages} · {Math.round(progress)}%
-        </small>
+        <span className="toolbar-progress-badge">
+          <span>{roundedProgress}%</span>
+        </span>
       </div>
 
       <div className="toolbar-actions">

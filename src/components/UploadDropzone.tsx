@@ -1,4 +1,5 @@
 import { ChangeEvent, DragEvent, useRef, useState } from 'react';
+import { UploadCloud } from 'lucide-react';
 
 interface UploadDropzoneProps {
   disabled: boolean;
@@ -10,7 +11,21 @@ export default function UploadDropzone({ disabled, variant = 'default', onUpload
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [pulsing, setPulsing] = useState(false);
-
+  const isHero = variant === 'hero';
+  const title = disabled
+    ? 'Threading your PDF into the library...'
+    : dragging
+      ? 'Release to start the upload'
+      : isHero
+        ? 'Add your PDF to the reading path'
+        : 'Upload PDF';
+  const hint = disabled
+    ? 'Reading page count and preparing your project.'
+    : dragging
+      ? 'Ariadne will save the file and open it when ready.'
+      : isHero
+        ? 'Drop a PDF here, or click to choose from your computer.'
+        : 'Drop a file or choose from your computer.';
   function fireUpload(file: File) {
     setPulsing(true);
     window.setTimeout(() => setPulsing(false), 600);
@@ -37,9 +52,10 @@ export default function UploadDropzone({ disabled, variant = 'default', onUpload
 
   const classes = [
     'upload-dropzone',
-    variant === 'hero' ? 'hero' : '',
+    isHero ? 'hero' : '',
     dragging ? 'dragging' : '',
     pulsing ? 'pulsing' : '',
+    disabled ? 'is-uploading' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -58,20 +74,16 @@ export default function UploadDropzone({ disabled, variant = 'default', onUpload
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
+        aria-busy={disabled}
       >
-        <i className="drop-thread" aria-hidden="true" />
-        <span>
-          {disabled
-            ? 'Preparing your PDF...'
-            : variant === 'hero'
-              ? 'Drop a PDF to add it to your library'
-              : 'Upload PDF'}
+        <span className="upload-portal" aria-hidden="true">
+          <UploadCloud className="upload-cloud-icon" size={25} strokeWidth={1.75} />
         </span>
-        <small>
-          {variant === 'hero'
-            ? 'Or click to choose from your computer'
-            : 'Drop a file or choose from your computer'}
-        </small>
+        <span className="upload-copy">
+          <span className="upload-title">{title}</span>
+          <small>{hint}</small>
+        </span>
+        <span className="upload-progress" aria-hidden="true" />
       </button>
       <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={pickFile} />
     </>

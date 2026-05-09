@@ -378,7 +378,6 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     <section className="reader-shell">
       <PdfToolbar
         title={project.title}
-        currentPage={currentPage}
         totalPages={project.totalPages}
         progress={progress}
         zoom={zoom}
