@@ -2069,6 +2069,10 @@ h3 {
   margin-bottom: 16px;
 }
 
+.outline-import-button {
+  margin: 12px 0 16px;
+}
+
 .chapter-page-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

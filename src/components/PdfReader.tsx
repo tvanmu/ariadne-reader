@@ -18,6 +18,7 @@ import {
   updateCloudProgress,
   updateCloudReadingTime,
 } from '../services/projects';
+import { extractChaptersFromOutline } from '../services/pdfOutline';
 import {
   fetchLocalProject,
   getLocalPdfBlob,
@@ -104,6 +105,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
   const [estimatedPageSize, setEstimatedPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
+  const [outlineChapters, setOutlineChapters] = useState<PDFProject['chapters']>([]);
   const [intersectingPageNumbers, setIntersectingPageNumbers] = useState<Set<number>>(
     () => new Set([1]),
   );
@@ -240,6 +242,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       resetSessionClock();
       setEstimatedPageSize(DEFAULT_PAGE_SIZE);
       setPageSizes({});
+      setOutlineChapters([]);
       searchTextCacheRef.current.clear();
       setSearchMatches([]);
       setActiveSearchMatchIndex(-1);
@@ -495,6 +498,31 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     return () => window.clearTimeout(timer);
   }, [pdfDocument, project]);
+
+  useEffect(() => {
+    if (!pdfDocument) {
+      setOutlineChapters([]);
+      return;
+    }
+
+    let active = true;
+
+    extractChaptersFromOutline(pdfDocument)
+      .then((chapters) => {
+        if (active) {
+          setOutlineChapters(chapters);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setOutlineChapters([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [pdfDocument]);
 
   useEffect(() => {
     updateFitWidthZoom();
@@ -1000,6 +1028,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           <ChapterPanel
             chapters={project.chapters}
             currentPage={currentPage}
+            outlineChapters={outlineChapters}
             totalPages={project.totalPages}
             onSave={saveChapters}
           />

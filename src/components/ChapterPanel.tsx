@@ -11,6 +11,7 @@ import { uuid } from '../utils/uuid';
 interface ChapterPanelProps {
   chapters: Chapter[];
   currentPage: number;
+  outlineChapters: Chapter[];
   totalPages: number;
   onSave: (chapters: Chapter[]) => Promise<void>;
 }
@@ -32,6 +33,7 @@ const emptyDraft: ChapterDraft = {
 export default function ChapterPanel({
   chapters,
   currentPage,
+  outlineChapters,
   totalPages,
   onSave,
 }: ChapterPanelProps) {
@@ -88,6 +90,20 @@ export default function ChapterPanel({
     }
   }
 
+  async function importOutlineChapters() {
+    const invalidChapter = outlineChapters.find(
+      (chapter) => !validateChapter(chapter, totalPages).valid,
+    );
+
+    if (invalidChapter) {
+      setError(`The outline entry "${invalidChapter.title}" falls outside this PDF.`);
+      return;
+    }
+
+    await saveChapters(outlineChapters);
+    setDraft(emptyDraft);
+  }
+
   function editChapter(chapter: Chapter) {
     setDraft({
       id: chapter.id,
@@ -114,6 +130,18 @@ export default function ChapterPanel({
       ) : (
         <p className="panel-note">Add chapter ranges if you want structure beyond page progress.</p>
       )}
+
+      {chapters.length === 0 && outlineChapters.length > 0 ? (
+        <button
+          className="small-button ghost full-width outline-import-button"
+          type="button"
+          disabled={saving}
+          onClick={importOutlineChapters}
+        >
+          Import {outlineChapters.length}{' '}
+          {outlineChapters.length === 1 ? 'chapter' : 'chapters'} from this PDF
+        </button>
+      ) : null}
 
       <form className="chapter-form" onSubmit={handleSubmit}>
         <input
