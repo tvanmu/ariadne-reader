@@ -30,7 +30,7 @@ import ReadingStats from './ReadingStats';
 type PdfDocument = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>;
 
 const PDF_BASE_SCALE = 1.35;
-const MIN_CANVAS_OUTPUT_SCALE = 2.5;
+const BASELINE_CANVAS_OUTPUT_SCALE = 1;
 const MAX_CANVAS_OUTPUT_SCALE = 3;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.4;
@@ -547,7 +547,7 @@ async function readPageSizes(document: PdfDocument): Promise<Record<number, Page
 
 function getCanvasOutputScale(): number {
   return Math.min(
-    Math.max(window.devicePixelRatio || 1, MIN_CANVAS_OUTPUT_SCALE),
+    Math.max(window.devicePixelRatio || 1, BASELINE_CANVAS_OUTPUT_SCALE),
     MAX_CANVAS_OUTPUT_SCALE,
   );
 }
