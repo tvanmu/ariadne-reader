@@ -47,6 +47,7 @@ const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP_PERCENT = 10;
 const PAGE_RENDER_RADIUS = 2;
+const PAGE_SIZE_BATCH_SIZE = 25;
 const LEADING_PROGRESS_SAVE_INTERVAL_MS = 4000;
 const TRAILING_PROGRESS_SAVE_DELAY_MS = 1200;
 const DEFAULT_PAGE_SIZE: PageSize = {
@@ -58,6 +59,11 @@ interface PageSize {
   width: number;
   height: number;
 }
+
+type IdleWorkHandle = {
+  type: 'idle' | 'timeout';
+  id: number;
+};
 
 interface PdfReaderProps {
   projectId: string;
@@ -77,6 +83,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
+  const [estimatedPageSize, setEstimatedPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
@@ -171,10 +178,13 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   useEffect(() => {
     let active = true;
     let loadedDocument: PdfDocument | null = null;
+    let cancelPageSizeRead: (() => void) | null = null;
 
     async function loadReader() {
       setLoading(true);
       setError(null);
+      setEstimatedPageSize(DEFAULT_PAGE_SIZE);
+      setPageSizes({});
 
       try {
         const loadedProject =
@@ -210,14 +220,25 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           return;
         }
 
-        const measuredPageSizes = await readPageSizes(loadedDocument);
+        const anchorPageSize = await readPageSize(loadedDocument, projectWithBackedUpTime.currentPage);
         if (!active) {
           await loadedDocument.destroy();
           return;
         }
 
-        setPageSizes(measuredPageSizes);
+        setEstimatedPageSize(anchorPageSize);
+        setPageSizes({ [projectWithBackedUpTime.currentPage]: anchorPageSize });
         setPdfDocument(loadedDocument);
+        cancelPageSizeRead = readPageSizesInIdleBatches(loadedDocument, (measuredPageSizes) => {
+          if (!active) {
+            return;
+          }
+
+          setPageSizes((currentPageSizes) => ({
+            ...currentPageSizes,
+            ...measuredPageSizes,
+          }));
+        });
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -235,6 +256,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     return () => {
       active = false;
+      cancelPageSizeRead?.();
       if (loadedDocument) {
         void loadedDocument.destroy();
       }
@@ -617,7 +639,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                   key={pageNumber}
                   document={pdfDocument}
                   pageNumber={pageNumber}
-                  pageSize={pageSizes[pageNumber] ?? DEFAULT_PAGE_SIZE}
+                  pageSize={pageSizes[pageNumber] ?? estimatedPageSize}
                   shouldRender={renderedPageNumbers.has(pageNumber)}
                   zoom={zoom}
                   registerPage={registerPage}
@@ -723,25 +745,98 @@ function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerP
   );
 }
 
-async function readPageSizes(document: PdfDocument): Promise<Record<number, PageSize>> {
-  const entries = await Promise.all(
-    Array.from({ length: document.numPages }, async (_, index) => {
-      const pageNumber = index + 1;
-      const page = await document.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: PDF_BASE_SCALE });
-      page.cleanup();
+function readPageSizesInIdleBatches(
+  document: PdfDocument,
+  onBatch: (pageSizes: Record<number, PageSize>) => void,
+): () => void {
+  let cancelled = false;
+  let nextPageNumber = 1;
+  let pendingHandle: IdleWorkHandle | null = null;
 
-      return [
-        pageNumber,
-        {
-          width: Math.ceil(viewport.width),
-          height: Math.ceil(viewport.height),
-        },
-      ] as const;
-    }),
-  );
+  function scheduleNextBatch() {
+    pendingHandle = scheduleIdleWork(() => {
+      void measureNextBatch();
+    });
+  }
 
-  return Object.fromEntries(entries);
+  async function measureNextBatch() {
+    pendingHandle = null;
+
+    const batchStart = nextPageNumber;
+    const batchEnd = Math.min(document.numPages, batchStart + PAGE_SIZE_BATCH_SIZE - 1);
+    const measuredPageSizes: Record<number, PageSize> = {};
+    nextPageNumber = batchEnd + 1;
+
+    try {
+      for (let pageNumber = batchStart; pageNumber <= batchEnd; pageNumber += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        measuredPageSizes[pageNumber] = await readPageSize(document, pageNumber);
+      }
+    } catch {
+      return;
+    }
+
+    if (cancelled) {
+      return;
+    }
+
+    onBatch(measuredPageSizes);
+
+    if (nextPageNumber <= document.numPages) {
+      scheduleNextBatch();
+    }
+  }
+
+  scheduleNextBatch();
+
+  return () => {
+    cancelled = true;
+
+    if (pendingHandle) {
+      cancelIdleWork(pendingHandle);
+    }
+  };
+}
+
+async function readPageSize(document: PdfDocument, pageNumber: number): Promise<PageSize> {
+  const page = await document.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: PDF_BASE_SCALE });
+  page.cleanup();
+
+  return {
+    width: Math.ceil(viewport.width),
+    height: Math.ceil(viewport.height),
+  };
+}
+
+function scheduleIdleWork(callback: () => void): IdleWorkHandle {
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void) => number;
+  };
+
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    return { type: 'idle', id: idleWindow.requestIdleCallback(callback) };
+  }
+
+  return { type: 'timeout', id: window.setTimeout(callback, 0) };
+}
+
+function cancelIdleWork(handle: IdleWorkHandle) {
+  const idleWindow = window as Window & {
+    cancelIdleCallback?: (id: number) => void;
+  };
+
+  if (handle.type === 'idle' && typeof idleWindow.cancelIdleCallback === 'function') {
+    idleWindow.cancelIdleCallback(handle.id);
+    return;
+  }
+
+  if (handle.type === 'timeout') {
+    window.clearTimeout(handle.id);
+  }
 }
 
 function getCanvasOutputScale(): number {
