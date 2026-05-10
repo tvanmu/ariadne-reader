@@ -664,6 +664,92 @@ h3 {
   }
 }
 
+/* Session summary */
+
+.session-summary-screen {
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - 124px);
+  padding: clamp(18px, 4vw, 54px) 0;
+}
+
+.session-summary-card {
+  display: grid;
+  gap: 20px;
+  width: min(760px, 100%);
+  padding: clamp(26px, 5vw, 46px);
+  overflow: hidden;
+}
+
+.session-summary-card h1 {
+  max-width: 13ch;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(38px, 6vw, 62px);
+  font-weight: 500;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.session-summary-card .muted {
+  max-width: 56ch;
+}
+
+.session-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.session-summary-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(244, 239, 228, 0.035);
+}
+
+.session-summary-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(184, 144, 102, 0.34);
+  border-radius: 50%;
+  background: rgba(184, 144, 102, 0.08);
+  color: var(--accent);
+}
+
+.session-summary-item div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-summary-item span:not(.session-summary-icon) {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.session-summary-item strong {
+  overflow-wrap: anywhere;
+  color: var(--ivory);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.session-summary-card .primary-button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
 /* Dashboard */
 
 .dashboard {
@@ -974,6 +1060,7 @@ h3 {
 
 .library-snapshot,
 .hero-assurance-item,
+.session-summary-card,
 .project-card,
 .project-skeleton,
 .reader-panel,
@@ -2628,6 +2715,20 @@ h3 {
   .hero-headline {
     font-size: 40px;
     line-height: 1.06;
+  }
+
+  .session-summary-screen {
+    align-items: start;
+    min-height: calc(100dvh - 104px);
+    padding-top: 18px;
+  }
+
+  .session-summary-card h1 {
+    max-width: 100%;
+  }
+
+  .session-summary-grid {
+    grid-template-columns: 1fr;
   }
 
   .hero-summary {

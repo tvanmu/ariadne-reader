@@ -51,6 +51,17 @@ export interface ReadingSessionUpsertInput {
   pagesRead: number;
 }
 
+export interface SessionSummary {
+  projectTitle: string;
+  pagesRead: number;
+  seconds: number;
+  averagePace: number | null;
+  currentChapterTitle: string | null;
+  daysRemaining: number | null;
+  dailyTarget: number | null;
+  todayPagesRemaining: number | null;
+}
+
 export interface PDFProject {
   id: string;
   userId: string;

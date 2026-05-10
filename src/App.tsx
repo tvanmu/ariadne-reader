@@ -5,7 +5,9 @@ import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
 import LabyrinthMark from './components/LabyrinthMark';
 import PdfReader from './components/PdfReader';
+import SessionSummaryCard from './components/SessionSummaryCard';
 import StatueLineBackdrop from './components/StatueLineBackdrop';
+import type { SessionSummary } from './types';
 
 type StorageMode = 'local' | 'cloud';
 
@@ -18,6 +20,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
+  const [lastSessionSummary, setLastSessionSummary] = useState<SessionSummary | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
 
@@ -40,11 +43,13 @@ export default function App() {
         setShowPasswordReset(true);
         setShowAuth(false);
         setActiveProject(null);
+        setLastSessionSummary(null);
         return;
       }
 
       if (!nextSession) {
         setActiveProject(null);
+        setLastSessionSummary(null);
         setShowPasswordReset(false);
       }
 
@@ -70,12 +75,19 @@ export default function App() {
   }
 
   const storageMode: StorageMode = session?.user ? 'cloud' : 'local';
+  function handleReaderBack(summary: SessionSummary | null) {
+    setActiveProject(null);
+    setLastSessionSummary(summary);
+  }
+
   const screenKey = showPasswordReset
     ? 'password-reset'
     : showAuth && !session?.user
     ? 'auth'
     : activeProject
       ? `reader:${activeProject.id}`
+      : lastSessionSummary
+        ? 'session-summary'
       : 'dashboard';
 
   return (
@@ -86,7 +98,10 @@ export default function App() {
         <button
           className="wordmark-button"
           type="button"
-          onClick={() => setActiveProject(null)}
+          onClick={() => {
+            setActiveProject(null);
+            setLastSessionSummary(null);
+          }}
           aria-label="Return to dashboard"
         >
           <LabyrinthMark size={36} />
@@ -125,14 +140,25 @@ export default function App() {
           <PdfReader
             projectId={activeProject.id}
             storageMode={activeProject.storageMode}
-            onBack={() => setActiveProject(null)}
+            onBack={handleReaderBack}
+          />
+        ) : lastSessionSummary ? (
+          <SessionSummaryCard
+            summary={lastSessionSummary}
+            onContinue={() => setLastSessionSummary(null)}
           />
         ) : (
           <Dashboard
             user={session?.user ?? null}
             storageMode={storageMode}
-            onOpenProject={(projectId) => setActiveProject({ id: projectId, storageMode })}
-            onSignIn={() => setShowAuth(true)}
+            onOpenProject={(projectId) => {
+              setLastSessionSummary(null);
+              setActiveProject({ id: projectId, storageMode });
+            }}
+            onSignIn={() => {
+              setLastSessionSummary(null);
+              setShowAuth(true);
+            }}
           />
         )}
       </div>

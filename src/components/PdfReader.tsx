@@ -7,6 +7,7 @@ import type {
   PDFProject,
   ReadingSession,
   ReadingSessionUpsertInput,
+  SessionSummary,
   ZoomMode,
 } from '../types';
 import { pdfjsLib } from '../lib/pdf';
@@ -52,7 +53,12 @@ import {
   clearReadingTimeBackup,
   saveReadingTimeBackup,
 } from '../services/readingTimeBackup';
-import { calculateProgress, clampPage } from '../utils/progress';
+import {
+  calculateProgress,
+  clampPage,
+  getCurrentChapter,
+  getDeadlineStatus,
+} from '../utils/progress';
 import { getLocalDateKey } from '../utils/dateKeys';
 import { uuid } from '../utils/uuid';
 import {
@@ -85,6 +91,7 @@ const PAGE_SIZE_BATCH_SIZE = 25;
 const SEARCH_DEBOUNCE_DELAY_MS = 200;
 const LEADING_PROGRESS_SAVE_INTERVAL_MS = 4000;
 const TRAILING_PROGRESS_SAVE_DELAY_MS = 1200;
+const SESSION_SUMMARY_MIN_SECONDS = 60;
 const EMPTY_HIGHLIGHTS: Highlight[] = [];
 const DEFAULT_PAGE_SIZE: PageSize = {
   width: 826,
@@ -113,7 +120,7 @@ interface PageSearchText {
 interface PdfReaderProps {
   projectId: string;
   storageMode: 'local' | 'cloud';
-  onBack: () => void;
+  onBack: (summary: SessionSummary | null) => void;
 }
 
 export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderProps) {
@@ -1030,6 +1037,24 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     setScrollOffset(viewer.scrollTop);
   }
 
+  function handleBackToLibrary() {
+    recordVisibleSessionElapsed(true);
+
+    const summary = project
+      ? buildSessionSummary(
+          project,
+          currentPage,
+          sessionSecondsRef.current,
+          visitedPageNumbersRef.current.size,
+          syncedVisitedPageCountRef.current,
+          readingSessionsRef.current,
+        )
+      : null;
+
+    void flushReadingTime();
+    onBack(summary);
+  }
+
   function goToPreviousSearchMatch() {
     if (searchMatches.length === 0) {
       return;
@@ -1229,7 +1254,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         <AlertTriangle size={28} />
         <h1>Could not open this PDF</h1>
         <p>{error ?? 'The reader did not receive a valid document.'}</p>
-        <button className="primary-button" type="button" onClick={onBack}>
+        <button className="primary-button" type="button" onClick={() => onBack(null)}>
           Back to dashboard
         </button>
       </section>
@@ -1251,7 +1276,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         rightOpen={rightOpen}
         onToggleLeft={() => setLeftOpen((open) => !open)}
         onToggleRight={() => setRightOpen((open) => !open)}
-        onBack={onBack}
+        onBack={handleBackToLibrary}
         onPageInputChange={setPageInput}
         onJump={() => scrollToPage(Number(pageInput))}
         onPrevious={() => scrollToPage(currentPage - 1)}
@@ -1804,6 +1829,42 @@ function sortHighlights(highlights: Highlight[]): Highlight[] {
 
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
+}
+
+function buildSessionSummary(
+  project: PDFProject,
+  currentPage: number,
+  sessionSeconds: number,
+  pagesRead: number,
+  syncedVisitedPageCount: number,
+  readingSessions: ReadingSession[],
+): SessionSummary | null {
+  const safeSeconds = Math.max(Math.floor(sessionSeconds), 0);
+
+  if (safeSeconds < SESSION_SUMMARY_MIN_SECONDS) {
+    return null;
+  }
+
+  const projectAtCurrentPage = { ...project, currentPage };
+  const deadline = getDeadlineStatus(projectAtCurrentPage);
+  const currentChapter = getCurrentChapter(project.chapters, currentPage);
+  const todaySession = readingSessions.find(
+    (session) => session.projectId === project.id && session.date === getLocalDateKey(),
+  );
+  const unsyncedPagesRead = Math.max(pagesRead - syncedVisitedPageCount, 0);
+  const todayPagesRead = (todaySession?.pagesRead ?? 0) + unsyncedPagesRead;
+
+  return {
+    projectTitle: project.title,
+    pagesRead,
+    seconds: safeSeconds,
+    averagePace: pagesRead > 0 ? Math.round((pagesRead / safeSeconds) * 3600) : null,
+    currentChapterTitle: currentChapter?.title ?? null,
+    daysRemaining: deadline.daysRemaining,
+    dailyTarget: deadline.dailyTarget,
+    todayPagesRemaining:
+      deadline.dailyTarget === null ? null : Math.max(deadline.dailyTarget - todayPagesRead, 0),
+  };
 }
 
 function getNextReadingSessionInput(
