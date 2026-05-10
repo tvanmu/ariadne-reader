@@ -23,6 +23,11 @@ class AriadneDatabase extends Dexie {
       projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
       blobs: 'key, savedAt',
     });
+
+    this.version(3).stores({
+      projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
+      blobs: 'key, savedAt',
+    });
   }
 }
 
@@ -63,7 +68,10 @@ export async function deleteProject(id: string): Promise<void> {
 
 export async function updateProgress(
   projectId: string,
-  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode' | 'lastOpenedAt'>,
+  progress: Pick<
+    PDFProject,
+    'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode' | 'pageTint' | 'lastOpenedAt'
+  >,
 ): Promise<void> {
   await db.projects.update(projectId, progress);
 }
@@ -99,5 +107,6 @@ function withProjectDefaults(project: PDFProject): PDFProject {
   return {
     ...project,
     zoomMode: project.zoomMode ?? 'manual',
+    pageTint: project.pageTint ?? 'paper',
   };
 }

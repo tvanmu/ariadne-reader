@@ -28,6 +28,7 @@ create table if not exists public.pdf_projects (
   scroll_offset numeric not null default 0,
   zoom numeric not null default 1 check (zoom > 0),
   zoom_mode text not null default 'manual' check (zoom_mode in ('manual', 'fit-width')),
+  page_tint text not null default 'paper' check (page_tint in ('paper', 'sepia', 'night')),
   storage_path text not null,
   uploaded_at timestamptz not null default now(),
   last_opened_at timestamptz,

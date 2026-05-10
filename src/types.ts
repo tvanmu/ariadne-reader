@@ -6,6 +6,7 @@ export interface Chapter {
 }
 
 export type ZoomMode = 'manual' | 'fit-width';
+export type PageTint = 'paper' | 'sepia' | 'night';
 
 export interface PDFProject {
   id: string;
@@ -18,6 +19,7 @@ export interface PDFProject {
   scrollOffset: number;
   zoom: number;
   zoomMode: ZoomMode;
+  pageTint: PageTint;
   uploadedAt: string;
   lastOpenedAt: string | null;
   deadline: string | null;
@@ -32,6 +34,7 @@ export interface ReaderState {
   scrollOffset: number;
   zoom: number;
   zoomMode: ZoomMode;
+  pageTint: PageTint;
   sessionStartedAt: string;
   lastSavedAt: string;
 }

@@ -1,4 +1,4 @@
-import type { Chapter, PDFProject, ZoomMode } from '../types';
+import type { Chapter, PageTint, PDFProject, ZoomMode } from '../types';
 import { PDF_BUCKET_NAME, supabase } from '../lib/supabase';
 import { clampPage } from '../utils/progress';
 import { uuid } from '../utils/uuid';
@@ -24,6 +24,7 @@ type ProjectRow = {
   scroll_offset: number | string;
   zoom: number | string;
   zoom_mode: string | null;
+  page_tint: string | null;
   uploaded_at: string;
   last_opened_at: string | null;
   deadline: string | null;
@@ -117,6 +118,7 @@ export async function createProjectFromPdf(input: {
     scroll_offset: 0,
     zoom: 1,
     zoom_mode: 'manual',
+    page_tint: 'paper',
     uploaded_at: now,
     last_opened_at: now,
     deadline: null,
@@ -173,7 +175,7 @@ export async function deleteCloudProject(project: PDFProject): Promise<void> {
 
 export async function updateCloudProgress(
   project: PDFProject,
-  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode'>,
+  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode' | 'pageTint'>,
 ): Promise<PDFProject> {
   const lastOpenedAt = new Date().toISOString();
   const nextProgress = {
@@ -181,6 +183,7 @@ export async function updateCloudProgress(
     scrollOffset: Math.max(progress.scrollOffset, 0),
     zoom: Math.max(progress.zoom, 0.5),
     zoomMode: progress.zoomMode,
+    pageTint: progress.pageTint,
     lastOpenedAt,
   };
 
@@ -191,6 +194,7 @@ export async function updateCloudProgress(
       scroll_offset: nextProgress.scrollOffset,
       zoom: nextProgress.zoom,
       zoom_mode: nextProgress.zoomMode,
+      page_tint: nextProgress.pageTint,
       last_opened_at: lastOpenedAt,
     })
     .eq('id', project.id)
@@ -324,6 +328,7 @@ function mapProjectRow(row: ProjectRow, chapterRows: ChapterRow[]): PDFProject {
     scrollOffset: Number(row.scroll_offset) || 0,
     zoom: Number(row.zoom) || 1,
     zoomMode: toZoomMode(row.zoom_mode),
+    pageTint: toPageTint(row.page_tint),
     uploadedAt: row.uploaded_at,
     lastOpenedAt: row.last_opened_at,
     deadline: row.deadline,
@@ -354,4 +359,12 @@ function chapterToRow(project: PDFProject) {
 
 function toZoomMode(value: string | null | undefined): ZoomMode {
   return value === 'fit-width' ? 'fit-width' : 'manual';
+}
+
+function toPageTint(value: string | null | undefined): PageTint {
+  if (value === 'sepia' || value === 'night') {
+    return value;
+  }
+
+  return 'paper';
 }

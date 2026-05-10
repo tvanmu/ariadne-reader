@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { PDFProject, ZoomMode } from '../types';
+import type { PageTint, PDFProject, ZoomMode } from '../types';
 import { pdfjsLib } from '../lib/pdf';
 import {
   isSupabaseConfigured,
@@ -101,6 +101,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [scrollOffset, setScrollOffset] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [zoomMode, setZoomMode] = useState<ZoomMode>('manual');
+  const [pageTint, setPageTint] = useState<PageTint>('paper');
   const [pageInput, setPageInput] = useState('1');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
@@ -243,6 +244,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setEstimatedPageSize(DEFAULT_PAGE_SIZE);
       setPageSizes({});
       setOutlineChapters([]);
+      setPageTint('paper');
       searchTextCacheRef.current.clear();
       setSearchMatches([]);
       setActiveSearchMatchIndex(-1);
@@ -266,6 +268,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         setScrollOffset(projectWithBackedUpTime.scrollOffset);
         setZoom(projectWithBackedUpTime.zoom);
         setZoomMode(projectWithBackedUpTime.zoomMode);
+        setPageTint(projectWithBackedUpTime.pageTint);
 
         if (projectWithBackedUpTime.totalReadingSeconds > loadedProject.totalReadingSeconds) {
           void persistRecoveredReadingTime(projectWithBackedUpTime);
@@ -447,7 +450,10 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
   const saveProgress = useCallback(
     async (
-      progressState: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode'>,
+      progressState: Pick<
+        PDFProject,
+        'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode' | 'pageTint'
+      >,
     ) => {
       const activeProject = projectRef.current;
       if (!activeProject) {
@@ -470,6 +476,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                 scrollOffset: updatedProject.scrollOffset,
                 zoom: updatedProject.zoom,
                 zoomMode: updatedProject.zoomMode,
+                pageTint: updatedProject.pageTint,
                 lastOpenedAt: updatedProject.lastOpenedAt,
               }
             : current,
@@ -606,7 +613,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       return;
     }
 
-    const progressState = { currentPage, scrollOffset, zoom, zoomMode };
+    const progressState = { currentPage, scrollOffset, zoom, zoomMode, pageTint };
     const now = Date.now();
 
     if (now - lastProgressSavedAtRef.current > LEADING_PROGRESS_SAVE_INTERVAL_MS) {
@@ -628,7 +635,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [currentPage, pdfDocument, project?.id, saveProgress, scrollOffset, zoom, zoomMode]);
+  }, [currentPage, pageTint, pdfDocument, project?.id, saveProgress, scrollOffset, zoom, zoomMode]);
 
   useEffect(() => {
     function clearPendingGoToFirst() {
@@ -914,6 +921,20 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     setZoom(1);
   }
 
+  function cyclePageTint() {
+    setPageTint((tint) => {
+      if (tint === 'paper') {
+        return 'sepia';
+      }
+
+      if (tint === 'sepia') {
+        return 'night';
+      }
+
+      return 'paper';
+    });
+  }
+
   const registerPage = useCallback((pageNumber: number, node: HTMLDivElement | null) => {
     const previousNode = pageRefs.current.get(pageNumber);
     const observer = pageObserverRef.current;
@@ -992,6 +1013,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         progress={progress}
         zoom={zoom}
         zoomMode={zoomMode}
+        pageTint={pageTint}
         pageInput={pageInput}
         saveState={saveState}
         leftOpen={leftOpen}
@@ -1006,6 +1028,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onZoomIn={() => zoomManually('in')}
         onZoomOut={() => zoomManually('out')}
         onCycleZoomMode={cycleZoomMode}
+        onCyclePageTint={cyclePageTint}
       />
       {searchOpen ? (
         <SearchBar
@@ -1046,6 +1069,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                   pageSize={pageSizes[pageNumber] ?? estimatedPageSize}
                   shouldRender={renderedPageNumbers.has(pageNumber)}
                   zoom={zoom}
+                  pageTint={pageTint}
                   searchQuery={visibleSearchQuery}
                   isActiveSearchPage={activeSearchMatch?.pageNumber === pageNumber}
                   registerPage={registerPage}
@@ -1119,6 +1143,7 @@ interface PdfPageProps {
   pageSize: PageSize;
   shouldRender: boolean;
   zoom: number;
+  pageTint: PageTint;
   searchQuery: string;
   isActiveSearchPage: boolean;
   registerPage: (pageNumber: number, node: HTMLDivElement | null) => void;
@@ -1130,6 +1155,7 @@ function PdfPage({
   pageSize,
   shouldRender,
   zoom,
+  pageTint,
   searchQuery,
   isActiveSearchPage,
   registerPage,
@@ -1207,7 +1233,11 @@ function PdfPage({
     >
       <div className="page-number-label">Page {pageNumber}</div>
       {renderError ? <p className="form-note error">{renderError}</p> : null}
-      <div className="pdf-page-shell" style={{ width: displayWidth, height: displayHeight }}>
+      <div
+        className="pdf-page-shell"
+        data-page-tint={pageTint}
+        style={{ width: displayWidth, height: displayHeight }}
+      >
         {shouldRender ? (
           <>
             <canvas ref={canvasRef} />

@@ -2,9 +2,12 @@ import {
   AlertTriangle,
   ArrowLeft,
   BookMarked,
+  BookOpen,
   Check,
   ChevronLeft,
   ChevronRight,
+  Moon,
+  Sun,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -16,6 +19,7 @@ interface PdfToolbarProps {
   progress: number;
   zoom: number;
   zoomMode: 'manual' | 'fit-width';
+  pageTint: 'paper' | 'sepia' | 'night';
   pageInput: string;
   saveState: 'idle' | 'saving' | 'saved' | 'error' | string;
   leftOpen: boolean;
@@ -30,6 +34,7 @@ interface PdfToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onCycleZoomMode: () => void;
+  onCyclePageTint: () => void;
 }
 
 export default function PdfToolbar({
@@ -38,6 +43,7 @@ export default function PdfToolbar({
   progress,
   zoom,
   zoomMode,
+  pageTint,
   pageInput,
   saveState,
   leftOpen,
@@ -52,8 +58,10 @@ export default function PdfToolbar({
   onZoomIn,
   onZoomOut,
   onCycleZoomMode,
+  onCyclePageTint,
 }: PdfToolbarProps) {
   const roundedProgress = Math.round(progress);
+  const TintIcon = pageTint === 'night' ? Moon : pageTint === 'sepia' ? Sun : BookOpen;
 
   return (
     <div className="reader-toolbar">
@@ -122,6 +130,14 @@ export default function PdfToolbar({
         <button className="icon-button" type="button" onClick={onZoomIn} aria-label="Zoom in">
           <ZoomIn size={17} />
         </button>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onCyclePageTint}
+          aria-label={`Page tint: ${getPageTintLabel(pageTint)}`}
+        >
+          <TintIcon size={17} strokeWidth={1.8} />
+        </button>
       </div>
 
       <div className="toolbar-right">
@@ -147,4 +163,16 @@ export default function PdfToolbar({
       </div>
     </div>
   );
+}
+
+function getPageTintLabel(pageTint: 'paper' | 'sepia' | 'night'): string {
+  if (pageTint === 'sepia') {
+    return 'Sepia';
+  }
+
+  if (pageTint === 'night') {
+    return 'Night';
+  }
+
+  return 'Paper';
 }

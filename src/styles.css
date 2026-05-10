@@ -2180,6 +2180,28 @@ h3 {
   background: #ffffff;
 }
 
+.pdf-page-shell::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+}
+
+.pdf-page-shell[data-page-tint='paper']::after {
+  display: none;
+}
+
+.pdf-page-shell[data-page-tint='sepia']::after {
+  background: #fbf1d9;
+  mix-blend-mode: multiply;
+}
+
+.pdf-page-shell[data-page-tint='night']::after {
+  background: #ffffff;
+  mix-blend-mode: difference;
+}
+
 .pdf-page-placeholder {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 240, 231, 0.96));
 }
@@ -2187,7 +2209,7 @@ h3 {
 .pdf-text-layer {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   overflow: clip;
   line-height: 1;
   text-align: initial;

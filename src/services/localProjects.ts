@@ -54,6 +54,7 @@ export async function createLocalProjectFromPdf(input: {
     scrollOffset: 0,
     zoom: 1,
     zoomMode: 'manual',
+    pageTint: 'paper',
     uploadedAt: now,
     lastOpenedAt: now,
     deadline: null,
@@ -84,7 +85,7 @@ export async function deleteLocalProject(project: PDFProject): Promise<void> {
 
 export async function updateLocalProgress(
   project: PDFProject,
-  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode'>,
+  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode' | 'pageTint'>,
 ): Promise<PDFProject> {
   const lastOpenedAt = new Date().toISOString();
   const nextProject = {
@@ -93,6 +94,7 @@ export async function updateLocalProgress(
     scrollOffset: Math.max(progress.scrollOffset, 0),
     zoom: Math.max(progress.zoom, 0.5),
     zoomMode: progress.zoomMode,
+    pageTint: progress.pageTint,
     lastOpenedAt,
   };
 
@@ -101,6 +103,7 @@ export async function updateLocalProgress(
     scrollOffset: nextProject.scrollOffset,
     zoom: nextProject.zoom,
     zoomMode: nextProject.zoomMode,
+    pageTint: nextProject.pageTint,
     lastOpenedAt,
   });
 
