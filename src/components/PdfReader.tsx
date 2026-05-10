@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { PDFProject } from '../types';
+import type { PDFProject, ZoomMode } from '../types';
 import { pdfjsLib } from '../lib/pdf';
 import {
   isSupabaseConfigured,
@@ -55,6 +55,7 @@ const MAX_CANVAS_OUTPUT_SCALE = 3;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP_PERCENT = 10;
+const VIEWER_FIT_WIDTH_MIN_INSET = 68;
 const PAGE_RENDER_RADIUS = 2;
 const PAGE_SIZE_BATCH_SIZE = 25;
 const SEARCH_DEBOUNCE_DELAY_MS = 200;
@@ -98,6 +99,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [currentPage, setCurrentPage] = useState(1);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [zoomMode, setZoomMode] = useState<ZoomMode>('manual');
   const [pageInput, setPageInput] = useState('1');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
@@ -154,6 +156,21 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     return pageNumbers;
   }, [currentPage, intersectingPageNumbers, pdfDocument]);
+
+  const updateFitWidthZoom = useCallback(() => {
+    if (zoomMode !== 'fit-width') {
+      return;
+    }
+
+    const viewer = viewerRef.current;
+    if (!viewer) {
+      return;
+    }
+
+    const pageSize = pageSizes[currentPage] ?? estimatedPageSize;
+    const nextZoom = getFitWidthZoom(viewer, pageSize);
+    setZoom((currentZoom) => (Math.abs(currentZoom - nextZoom) < 0.005 ? currentZoom : nextZoom));
+  }, [currentPage, estimatedPageSize, pageSizes, zoomMode]);
 
   useEffect(() => {
     projectRef.current = project;
@@ -242,6 +259,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         setIntersectingPageNumbers(new Set([projectWithBackedUpTime.currentPage]));
         setScrollOffset(projectWithBackedUpTime.scrollOffset);
         setZoom(projectWithBackedUpTime.zoom);
+        setZoomMode(projectWithBackedUpTime.zoomMode);
 
         if (projectWithBackedUpTime.totalReadingSeconds > loadedProject.totalReadingSeconds) {
           void persistRecoveredReadingTime(projectWithBackedUpTime);
@@ -422,7 +440,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   }
 
   const saveProgress = useCallback(
-    async (progressState: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom'>) => {
+    async (
+      progressState: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode'>,
+    ) => {
       const activeProject = projectRef.current;
       if (!activeProject) {
         return;
@@ -443,6 +463,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                 currentPage: updatedProject.currentPage,
                 scrollOffset: updatedProject.scrollOffset,
                 zoom: updatedProject.zoom,
+                zoomMode: updatedProject.zoomMode,
                 lastOpenedAt: updatedProject.lastOpenedAt,
               }
             : current,
@@ -471,6 +492,22 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     return () => window.clearTimeout(timer);
   }, [pdfDocument, project]);
+
+  useEffect(() => {
+    updateFitWidthZoom();
+  }, [leftOpen, rightOpen, updateFitWidthZoom]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || zoomMode !== 'fit-width') {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => updateFitWidthZoom());
+    observer.observe(viewer);
+
+    return () => observer.disconnect();
+  }, [updateFitWidthZoom, zoomMode]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -536,7 +573,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       return;
     }
 
-    const progressState = { currentPage, scrollOffset, zoom };
+    const progressState = { currentPage, scrollOffset, zoom, zoomMode };
     const now = Date.now();
 
     if (now - lastProgressSavedAtRef.current > LEADING_PROGRESS_SAVE_INTERVAL_MS) {
@@ -558,7 +595,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [currentPage, pdfDocument, project?.id, saveProgress, scrollOffset, zoom]);
+  }, [currentPage, pdfDocument, project?.id, saveProgress, scrollOffset, zoom, zoomMode]);
 
   useEffect(() => {
     function handleSearchShortcut(event: KeyboardEvent) {
@@ -703,6 +740,27 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     );
   }
 
+  function zoomManually(direction: 'in' | 'out') {
+    setZoomMode('manual');
+    setZoom((value) => getSteppedZoom(value, direction));
+  }
+
+  function cycleZoomMode() {
+    if (zoomMode === 'fit-width') {
+      setZoomMode('manual');
+      setZoom(1);
+      return;
+    }
+
+    if (Math.round(zoom * 100) === 100) {
+      setZoomMode('fit-width');
+      return;
+    }
+
+    setZoomMode('manual');
+    setZoom(1);
+  }
+
   const registerPage = useCallback((pageNumber: number, node: HTMLDivElement | null) => {
     const previousNode = pageRefs.current.get(pageNumber);
     const observer = pageObserverRef.current;
@@ -780,6 +838,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         totalPages={project.totalPages}
         progress={progress}
         zoom={zoom}
+        zoomMode={zoomMode}
         pageInput={pageInput}
         saveState={saveState}
         leftOpen={leftOpen}
@@ -791,9 +850,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onJump={() => scrollToPage(Number(pageInput))}
         onPrevious={() => scrollToPage(currentPage - 1)}
         onNext={() => scrollToPage(currentPage + 1)}
-        onZoomIn={() => setZoom((value) => getSteppedZoom(value, 'in'))}
-        onZoomOut={() => setZoom((value) => getSteppedZoom(value, 'out'))}
-        onCycleZoomMode={() => setZoom(1)}
+        onZoomIn={() => zoomManually('in')}
+        onZoomOut={() => zoomManually('out')}
+        onCycleZoomMode={cycleZoomMode}
       />
       {searchOpen ? (
         <SearchBar
@@ -1168,4 +1227,22 @@ function getSteppedZoom(value: number, direction: 'in' | 'out'): number {
       : Math.floor((currentPercent - 1) / ZOOM_STEP_PERCENT) * ZOOM_STEP_PERCENT;
 
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextPercent / 100));
+}
+
+function getFitWidthZoom(viewer: HTMLDivElement, pageSize: PageSize): number {
+  const pages = viewer.querySelector<HTMLElement>('.pdf-pages');
+  const pagesStyle = pages ? window.getComputedStyle(pages) : null;
+  const horizontalInset = pagesStyle
+    ? parseCssPixels(pagesStyle.paddingLeft) + parseCssPixels(pagesStyle.paddingRight)
+    : VIEWER_FIT_WIDTH_MIN_INSET;
+  const availableWidth = Math.max(viewer.clientWidth - horizontalInset, 240);
+  const unscaledPageWidth = pageSize.width / PDF_BASE_SCALE;
+  const nextZoom = availableWidth / unscaledPageWidth / PDF_BASE_SCALE;
+
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+}
+
+function parseCssPixels(value: string): number {
+  const parsedValue = Number.parseFloat(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
 }

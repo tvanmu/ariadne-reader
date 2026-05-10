@@ -15,6 +15,7 @@ interface PdfToolbarProps {
   totalPages: number;
   progress: number;
   zoom: number;
+  zoomMode: 'manual' | 'fit-width';
   pageInput: string;
   saveState: 'idle' | 'saving' | 'saved' | 'error' | string;
   leftOpen: boolean;
@@ -36,6 +37,7 @@ export default function PdfToolbar({
   totalPages,
   progress,
   zoom,
+  zoomMode,
   pageInput,
   saveState,
   leftOpen,
@@ -109,8 +111,13 @@ export default function PdfToolbar({
         <button className="icon-button" type="button" onClick={onZoomOut} aria-label="Zoom out">
           <ZoomOut size={17} />
         </button>
-        <button className="zoom-pill" type="button" onClick={onCycleZoomMode} aria-label="Reset zoom to 100%">
-          {Math.round(zoom * 100)}%
+        <button
+          className="zoom-pill"
+          type="button"
+          onClick={onCycleZoomMode}
+          aria-label={zoomMode === 'fit-width' ? 'Reset zoom to 100%' : 'Fit page to width'}
+        >
+          {zoomMode === 'fit-width' ? 'Fit' : `${Math.round(zoom * 100)}%`}
         </button>
         <button className="icon-button" type="button" onClick={onZoomIn} aria-label="Zoom in">
           <ZoomIn size={17} />

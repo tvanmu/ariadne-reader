@@ -18,6 +18,11 @@ class AriadneDatabase extends Dexie {
       projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
       blobs: 'key, savedAt',
     });
+
+    this.version(2).stores({
+      projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
+      blobs: 'key, savedAt',
+    });
   }
 }
 
@@ -31,7 +36,7 @@ export async function getProjects(): Promise<PDFProject[]> {
   return db.projects
     .toArray()
     .then((projects) =>
-      projects.sort(
+      projects.map(withProjectDefaults).sort(
         (a, b) =>
           new Date(b.lastOpenedAt ?? b.uploadedAt).getTime() -
           new Date(a.lastOpenedAt ?? a.uploadedAt).getTime(),
@@ -40,7 +45,9 @@ export async function getProjects(): Promise<PDFProject[]> {
 }
 
 export async function getProject(id: string): Promise<PDFProject | undefined> {
-  return db.projects.get(id);
+  return db.projects
+    .get(id)
+    .then((project) => (project ? withProjectDefaults(project) : undefined));
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -56,7 +63,7 @@ export async function deleteProject(id: string): Promise<void> {
 
 export async function updateProgress(
   projectId: string,
-  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'lastOpenedAt'>,
+  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode' | 'lastOpenedAt'>,
 ): Promise<void> {
   await db.projects.update(projectId, progress);
 }
@@ -86,4 +93,11 @@ export async function updateReadingTime(
   totalReadingSeconds: number,
 ): Promise<void> {
   await db.projects.update(projectId, { totalReadingSeconds });
+}
+
+function withProjectDefaults(project: PDFProject): PDFProject {
+  return {
+    ...project,
+    zoomMode: project.zoomMode ?? 'manual',
+  };
 }

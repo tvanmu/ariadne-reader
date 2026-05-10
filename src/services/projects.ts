@@ -1,4 +1,4 @@
-import type { Chapter, PDFProject } from '../types';
+import type { Chapter, PDFProject, ZoomMode } from '../types';
 import { PDF_BUCKET_NAME, supabase } from '../lib/supabase';
 import { clampPage } from '../utils/progress';
 import { uuid } from '../utils/uuid';
@@ -23,6 +23,7 @@ type ProjectRow = {
   current_page: number;
   scroll_offset: number | string;
   zoom: number | string;
+  zoom_mode: string | null;
   uploaded_at: string;
   last_opened_at: string | null;
   deadline: string | null;
@@ -115,6 +116,7 @@ export async function createProjectFromPdf(input: {
     current_page: 1,
     scroll_offset: 0,
     zoom: 1,
+    zoom_mode: 'manual',
     uploaded_at: now,
     last_opened_at: now,
     deadline: null,
@@ -171,13 +173,14 @@ export async function deleteCloudProject(project: PDFProject): Promise<void> {
 
 export async function updateCloudProgress(
   project: PDFProject,
-  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom'>,
+  progress: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom' | 'zoomMode'>,
 ): Promise<PDFProject> {
   const lastOpenedAt = new Date().toISOString();
   const nextProgress = {
     currentPage: clampPage(progress.currentPage, project.totalPages),
     scrollOffset: Math.max(progress.scrollOffset, 0),
     zoom: Math.max(progress.zoom, 0.5),
+    zoomMode: progress.zoomMode,
     lastOpenedAt,
   };
 
@@ -187,6 +190,7 @@ export async function updateCloudProgress(
       current_page: nextProgress.currentPage,
       scroll_offset: nextProgress.scrollOffset,
       zoom: nextProgress.zoom,
+      zoom_mode: nextProgress.zoomMode,
       last_opened_at: lastOpenedAt,
     })
     .eq('id', project.id)
@@ -319,6 +323,7 @@ function mapProjectRow(row: ProjectRow, chapterRows: ChapterRow[]): PDFProject {
     currentPage: clampPage(row.current_page, row.total_pages),
     scrollOffset: Number(row.scroll_offset) || 0,
     zoom: Number(row.zoom) || 1,
+    zoomMode: toZoomMode(row.zoom_mode),
     uploadedAt: row.uploaded_at,
     lastOpenedAt: row.last_opened_at,
     deadline: row.deadline,
@@ -345,4 +350,8 @@ function chapterToRow(project: PDFProject) {
     start_page: chapter.startPage,
     end_page: chapter.endPage,
   });
+}
+
+function toZoomMode(value: string | null | undefined): ZoomMode {
+  return value === 'fit-width' ? 'fit-width' : 'manual';
 }

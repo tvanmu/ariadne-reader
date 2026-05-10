@@ -5,6 +5,8 @@ export interface Chapter {
   endPage: number;
 }
 
+export type ZoomMode = 'manual' | 'fit-width';
+
 export interface PDFProject {
   id: string;
   userId: string;
@@ -15,6 +17,7 @@ export interface PDFProject {
   currentPage: number;
   scrollOffset: number;
   zoom: number;
+  zoomMode: ZoomMode;
   uploadedAt: string;
   lastOpenedAt: string | null;
   deadline: string | null;
@@ -28,6 +31,7 @@ export interface ReaderState {
   currentPage: number;
   scrollOffset: number;
   zoom: number;
+  zoomMode: ZoomMode;
   sessionStartedAt: string;
   lastSavedAt: string;
 }
