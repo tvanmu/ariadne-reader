@@ -32,6 +32,10 @@ import {
   saveReadingTimeBackup,
 } from '../services/readingTimeBackup';
 import { calculateProgress, clampPage } from '../utils/progress';
+import {
+  resetSessionClock,
+  setSessionClockElapsedSeconds,
+} from '../utils/sessionClock';
 import ChapterPanel from './ChapterPanel';
 import DeadlineEditor from './DeadlineEditor';
 import PdfToolbar from './PdfToolbar';
@@ -81,7 +85,6 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [zoom, setZoom] = useState(1);
   const [pageInput, setPageInput] = useState('1');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [sessionSeconds, setSessionSeconds] = useState(0);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
   const [estimatedPageSize, setEstimatedPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [intersectingPageNumbers, setIntersectingPageNumbers] = useState<Set<number>>(
@@ -132,10 +135,6 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     projectRef.current = project;
   }, [project]);
 
-  useEffect(() => {
-    sessionSecondsRef.current = sessionSeconds;
-  }, [sessionSeconds]);
-
   const recordVisibleSessionElapsed = useCallback((force = false) => {
     const isReadableMoment = force || document.visibilityState === 'visible';
     const now = Date.now();
@@ -154,7 +153,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     lastSessionTickAtRef.current += elapsedSeconds * 1000;
     const nextSessionSeconds = sessionSecondsRef.current + elapsedSeconds;
     sessionSecondsRef.current = nextSessionSeconds;
-    setSessionSeconds(nextSessionSeconds);
+    setSessionClockElapsedSeconds(nextSessionSeconds);
 
     return nextSessionSeconds;
   }, []);
@@ -191,6 +190,10 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     async function loadReader() {
       setLoading(true);
       setError(null);
+      sessionSecondsRef.current = 0;
+      lastReadingSyncRef.current = 0;
+      lastSessionTickAtRef.current = Date.now();
+      resetSessionClock();
       setEstimatedPageSize(DEFAULT_PAGE_SIZE);
       setPageSizes({});
 
@@ -202,6 +205,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         }
 
         const projectWithBackedUpTime = applyReadingTimeBackup(loadedProject);
+        resetSessionClock(projectWithBackedUpTime.totalReadingSeconds);
 
         setProject(projectWithBackedUpTime);
         setCurrentPage(projectWithBackedUpTime.currentPage);
@@ -272,14 +276,6 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     };
   }, [projectId, storageMode]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      recordVisibleSessionElapsed();
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [recordVisibleSessionElapsed]);
-
   const flushReadingTime = useCallback(async () => {
     const activeProject = projectRef.current;
     const delta = sessionSecondsRef.current - lastReadingSyncRef.current;
@@ -339,10 +335,16 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   }, [recordVisibleSessionElapsed, storageMode]);
 
   useEffect(() => {
-    if (sessionSeconds > 0 && sessionSeconds % 15 === 0) {
-      void flushReadingTime();
-    }
-  }, [flushReadingTime, sessionSeconds]);
+    const timer = window.setInterval(() => {
+      const nextSessionSeconds = recordVisibleSessionElapsed();
+
+      if (nextSessionSeconds - lastReadingSyncRef.current >= 15) {
+        void flushReadingTime();
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [flushReadingTime, recordVisibleSessionElapsed]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -671,9 +673,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         </div>
 
         <aside className={`reader-side right${rightOpen ? '' : ' is-collapsed'}`}>
-          <ProgressPanel project={{ ...project, currentPage }} sessionSeconds={sessionSeconds} />
+          <ProgressPanel project={{ ...project, currentPage }} />
           <DeadlineEditor project={project} onSave={saveDeadline} />
-          <ReadingStats project={project} sessionSeconds={sessionSeconds} />
+          <ReadingStats project={project} />
         </aside>
       </div>
     </section>

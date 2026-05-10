@@ -7,13 +7,13 @@ import {
   getDeadlineStatus,
 } from '../utils/progress';
 import MazeIcon from './MazeIcon';
+import SessionClock from './SessionClock';
 
 interface ProgressPanelProps {
   project: PDFProject;
-  sessionSeconds: number;
 }
 
-export default function ProgressPanel({ project, sessionSeconds }: ProgressPanelProps) {
+export default function ProgressPanel({ project }: ProgressPanelProps) {
   const progress = calculateProgress(project.currentPage, project.totalPages);
   const deadline = getDeadlineStatus(project);
   const currentChapter = getCurrentChapter(project.chapters, project.currentPage);
@@ -40,7 +40,9 @@ export default function ProgressPanel({ project, sessionSeconds }: ProgressPanel
         </div>
         <div>
           <span>Session</span>
-          <strong>{formatPanelDuration(sessionSeconds)}</strong>
+          <strong>
+            <SessionClock format={formatPanelDuration} />
+          </strong>
         </div>
         <div>
           <span>Daily target</span>
