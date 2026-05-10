@@ -82,6 +82,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const pageObserverRef = useRef<IntersectionObserver | null>(null);
+  const intersectingPageNumbersRef = useRef<Set<number>>(new Set());
   const saveTimerRef = useRef<number | null>(null);
   const lastProgressSavedAtRef = useRef(0);
   const hasRestoredRef = useRef(false);
@@ -409,6 +411,56 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   }, [pdfDocument, project]);
 
   useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !pdfDocument) {
+      return;
+    }
+
+    const intersectingPageNumbers = intersectingPageNumbersRef.current;
+    intersectingPageNumbers.clear();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const pageNumber = Number((entry.target as HTMLElement).dataset.pageNumber);
+          if (!Number.isInteger(pageNumber)) {
+            return;
+          }
+
+          if (entry.isIntersecting) {
+            intersectingPageNumbers.add(pageNumber);
+          } else {
+            intersectingPageNumbers.delete(pageNumber);
+          }
+        });
+
+        if (!hasRestoredRef.current || intersectingPageNumbers.size === 0) {
+          return;
+        }
+
+        const nextPage = Math.min(...intersectingPageNumbers);
+        setCurrentPage(nextPage);
+        setPageInput(String(nextPage));
+      },
+      {
+        root: viewer,
+        rootMargin: '-35% 0px -55% 0px',
+      },
+    );
+
+    pageObserverRef.current = observer;
+    pageRefs.current.forEach((node) => observer.observe(node));
+
+    return () => {
+      observer.disconnect();
+      if (pageObserverRef.current === observer) {
+        pageObserverRef.current = null;
+      }
+      intersectingPageNumbers.clear();
+    };
+  }, [pdfDocument]);
+
+  useEffect(() => {
     if (!project || !pdfDocument) {
       return;
     }
@@ -453,29 +505,25 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       return;
     }
 
-    const nextScrollOffset = viewer.scrollTop;
-    setScrollOffset(nextScrollOffset);
-
-    const viewerRect = viewer.getBoundingClientRect();
-    const readingLine = viewerRect.top + viewerRect.height * 0.35;
-    let nearestPage = currentPage;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-
-    pageRefs.current.forEach((node, pageNumber) => {
-      const rect = node.getBoundingClientRect();
-      const distance = Math.abs(rect.top - readingLine);
-
-      if (rect.bottom >= viewerRect.top && rect.top <= viewerRect.bottom && distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestPage = pageNumber;
-      }
-    });
-
-    if (nearestPage !== currentPage) {
-      setCurrentPage(nearestPage);
-      setPageInput(String(nearestPage));
-    }
+    setScrollOffset(viewer.scrollTop);
   }
+
+  const registerPage = useCallback((pageNumber: number, node: HTMLDivElement | null) => {
+    const previousNode = pageRefs.current.get(pageNumber);
+    const observer = pageObserverRef.current;
+
+    if (previousNode && previousNode !== node) {
+      observer?.unobserve(previousNode);
+      intersectingPageNumbersRef.current.delete(pageNumber);
+    }
+
+    if (node) {
+      pageRefs.current.set(pageNumber, node);
+      observer?.observe(node);
+    } else {
+      pageRefs.current.delete(pageNumber);
+    }
+  }, []);
 
   async function saveDeadline(deadline: string | null) {
     if (!project) {
@@ -572,13 +620,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                   pageSize={pageSizes[pageNumber] ?? DEFAULT_PAGE_SIZE}
                   shouldRender={renderedPageNumbers.has(pageNumber)}
                   zoom={zoom}
-                  registerPage={(node) => {
-                    if (node) {
-                      pageRefs.current.set(pageNumber, node);
-                    } else {
-                      pageRefs.current.delete(pageNumber);
-                    }
-                  }}
+                  registerPage={registerPage}
                 />
               );
             })}
@@ -601,7 +643,7 @@ interface PdfPageProps {
   pageSize: PageSize;
   shouldRender: boolean;
   zoom: number;
-  registerPage: (node: HTMLDivElement | null) => void;
+  registerPage: (pageNumber: number, node: HTMLDivElement | null) => void;
 }
 
 function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerPage }: PdfPageProps) {
@@ -609,6 +651,10 @@ function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerP
   const [renderError, setRenderError] = useState<string | null>(null);
   const displayWidth = Math.ceil(pageSize.width * zoom);
   const displayHeight = Math.ceil(pageSize.height * zoom);
+  const pageFrameRef = useCallback(
+    (node: HTMLDivElement | null) => registerPage(pageNumber, node),
+    [pageNumber, registerPage],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -667,7 +713,7 @@ function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerP
   }, [document, pageNumber, shouldRender, zoom]);
 
   return (
-    <div className="pdf-page-frame" ref={registerPage}>
+    <div className="pdf-page-frame" data-page-number={pageNumber} ref={pageFrameRef}>
       <div className="page-number-label">Page {pageNumber}</div>
       {renderError ? <p className="form-note error">{renderError}</p> : null}
       <div className="pdf-page-shell" style={{ width: displayWidth, height: displayHeight }}>
