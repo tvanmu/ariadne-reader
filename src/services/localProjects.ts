@@ -4,12 +4,15 @@ import type {
   HighlightCreateInput,
   HighlightUpdateInput,
   PDFProject,
+  ReadingSession,
+  ReadingSessionUpsertInput,
 } from '../types';
 import {
   createHighlight as createCachedHighlight,
   deleteProject as deleteCachedProject,
   deleteHighlight as deleteCachedHighlight,
   fetchHighlights as fetchCachedHighlights,
+  fetchReadingSessions as fetchCachedReadingSessions,
   getPdfBlob,
   getProject,
   getProjects,
@@ -20,6 +23,7 @@ import {
   updateHighlight as updateCachedHighlight,
   updateProgress as updateCachedProgress,
   updateReadingTime as updateCachedReadingTime,
+  upsertReadingSession as upsertCachedReadingSession,
 } from '../storage/indexedDb';
 import { clampPage } from '../utils/progress';
 import { uuid } from '../utils/uuid';
@@ -196,6 +200,23 @@ export async function updateHighlight(
 
 export async function deleteHighlight(highlight: Highlight): Promise<void> {
   await deleteCachedHighlight(highlight.id);
+}
+
+export async function fetchReadingSessions(projectId: string): Promise<ReadingSession[]> {
+  return fetchCachedReadingSessions(projectId);
+}
+
+export async function upsertReadingSession(
+  project: PDFProject,
+  input: ReadingSessionUpsertInput,
+): Promise<ReadingSession> {
+  return upsertCachedReadingSession({
+    id: input.id ?? uuid(),
+    projectId: project.id,
+    date: input.date,
+    seconds: Math.max(Math.floor(input.seconds), 0),
+    pagesRead: Math.max(Math.floor(input.pagesRead), 0),
+  });
 }
 
 function normalizeHighlightUpdates(updates: HighlightUpdateInput): HighlightUpdateInput {

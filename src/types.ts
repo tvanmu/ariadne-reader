@@ -36,6 +36,21 @@ export type HighlightUpdateInput = Partial<
   Pick<Highlight, 'pageNumber' | 'ranges' | 'excerpt' | 'color' | 'note'>
 >;
 
+export interface ReadingSession {
+  id: string;
+  projectId: string;
+  date: string;
+  seconds: number;
+  pagesRead: number;
+}
+
+export interface ReadingSessionUpsertInput {
+  id?: string;
+  date: string;
+  seconds: number;
+  pagesRead: number;
+}
+
 export interface PDFProject {
   id: string;
   userId: string;

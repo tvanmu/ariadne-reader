@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { Highlight, HighlightCreateInput, PageTint, PDFProject, ZoomMode } from '../types';
+import type {
+  Highlight,
+  HighlightCreateInput,
+  PageTint,
+  PDFProject,
+  ReadingSession,
+  ReadingSessionUpsertInput,
+  ZoomMode,
+} from '../types';
 import { pdfjsLib } from '../lib/pdf';
 import {
   isSupabaseConfigured,
@@ -16,11 +24,13 @@ import {
   downloadPdfBlob,
   fetchHighlights as fetchCloudHighlights,
   fetchProject,
+  fetchReadingSessions as fetchCloudReadingSessions,
   updateHighlight as updateCloudHighlight,
   updateCloudChapters,
   updateCloudDeadline,
   updateCloudProgress,
   updateCloudReadingTime,
+  upsertReadingSession as upsertCloudReadingSession,
 } from '../services/projects';
 import { extractChaptersFromOutline } from '../services/pdfOutline';
 import {
@@ -28,12 +38,14 @@ import {
   deleteHighlight as deleteLocalHighlight,
   fetchHighlights as fetchLocalHighlights,
   fetchLocalProject,
+  fetchReadingSessions as fetchLocalReadingSessions,
   getLocalPdfBlob,
   updateHighlight as updateLocalHighlight,
   updateLocalChapters,
   updateLocalDeadline,
   updateLocalProgress,
   updateLocalReadingTime,
+  upsertReadingSession as upsertLocalReadingSession,
 } from '../services/localProjects';
 import {
   applyReadingTimeBackup,
@@ -41,6 +53,8 @@ import {
   saveReadingTimeBackup,
 } from '../services/readingTimeBackup';
 import { calculateProgress, clampPage } from '../utils/progress';
+import { getLocalDateKey } from '../utils/dateKeys';
+import { uuid } from '../utils/uuid';
 import {
   resetSessionClock,
   setSessionClockElapsedSeconds,
@@ -131,6 +145,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [editingHighlightId, setEditingHighlightId] = useState<string | null>(null);
+  const [readingSessions, setReadingSessions] = useState<ReadingSession[]>([]);
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -140,6 +155,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const lastProgressSavedAtRef = useRef(0);
   const hasRestoredRef = useRef(false);
   const projectRef = useRef<PDFProject | null>(null);
+  const readingSessionsRef = useRef<ReadingSession[]>([]);
+  const visitedPageNumbersRef = useRef<Set<number>>(new Set());
+  const syncedVisitedPageCountRef = useRef(0);
   const sessionSecondsRef = useRef(0);
   const lastReadingSyncRef = useRef(0);
   const lastSessionTickAtRef = useRef(Date.now());
@@ -195,6 +213,18 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     projectRef.current = project;
   }, [project]);
 
+  useEffect(() => {
+    readingSessionsRef.current = readingSessions;
+  }, [readingSessions]);
+
+  useEffect(() => {
+    if (!project) {
+      return;
+    }
+
+    visitedPageNumbersRef.current.add(currentPage);
+  }, [currentPage, project?.id]);
+
   const recordVisibleSessionElapsed = useCallback((force = false) => {
     const isReadableMoment = force || document.visibilityState === 'visible';
     const now = Date.now();
@@ -217,6 +247,39 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     return nextSessionSeconds;
   }, []);
+
+  const persistReadingSessionDelta = useCallback(
+    async (
+      activeProject: PDFProject,
+      secondsDelta: number,
+      pagesReadDelta: number,
+      syncedVisitedPageCount: number,
+    ) => {
+      const input = getNextReadingSessionInput(
+        readingSessionsRef.current,
+        activeProject.id,
+        secondsDelta,
+        pagesReadDelta,
+      );
+
+      if (!input) {
+        return;
+      }
+
+      const updatedSession =
+        storageMode === 'cloud'
+          ? await upsertCloudReadingSession(activeProject, input)
+          : await upsertLocalReadingSession(activeProject, input);
+      const nextSessions = upsertSessionInList(readingSessionsRef.current, updatedSession);
+      readingSessionsRef.current = nextSessions;
+      syncedVisitedPageCountRef.current = Math.max(
+        syncedVisitedPageCountRef.current,
+        syncedVisitedPageCount,
+      );
+      setReadingSessions(nextSessions);
+    },
+    [storageMode],
+  );
 
   useEffect(() => {
     if (storageMode !== 'cloud') {
@@ -265,6 +328,10 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setIsSearching(false);
       setHighlights([]);
       setEditingHighlightId(null);
+      setReadingSessions([]);
+      readingSessionsRef.current = [];
+      visitedPageNumbersRef.current = new Set();
+      syncedVisitedPageCountRef.current = 0;
 
       try {
         const loadedProject =
@@ -284,11 +351,16 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         setZoom(projectWithBackedUpTime.zoom);
         setZoomMode(projectWithBackedUpTime.zoomMode);
         setPageTint(projectWithBackedUpTime.pageTint);
+        visitedPageNumbersRef.current = new Set([projectWithBackedUpTime.currentPage]);
 
         const highlightsPromise =
           storageMode === 'cloud'
             ? fetchCloudHighlights(projectWithBackedUpTime.id)
             : fetchLocalHighlights(projectWithBackedUpTime.id);
+        const readingSessionsPromise =
+          storageMode === 'cloud'
+            ? fetchCloudReadingSessions(projectWithBackedUpTime.id)
+            : fetchLocalReadingSessions(projectWithBackedUpTime.id);
 
         highlightsPromise
           .then((loadedHighlights) => {
@@ -299,6 +371,17 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           .catch(() => {
             if (active) {
               setHighlights([]);
+            }
+          });
+        readingSessionsPromise
+          .then((loadedReadingSessions) => {
+            if (active) {
+              setReadingSessions(sortReadingSessions(loadedReadingSessions));
+            }
+          })
+          .catch(() => {
+            if (active) {
+              setReadingSessions([]);
             }
           });
 
@@ -367,6 +450,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const flushReadingTime = useCallback(async () => {
     const activeProject = projectRef.current;
     const delta = sessionSecondsRef.current - lastReadingSyncRef.current;
+    const visitedPageCount = visitedPageNumbersRef.current.size;
+    const pagesReadDelta = Math.max(visitedPageCount - syncedVisitedPageCountRef.current, 0);
 
     if (!activeProject || delta <= 0) {
       return;
@@ -389,16 +474,24 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setProject((current) =>
         current ? { ...current, totalReadingSeconds: updatedProject.totalReadingSeconds } : current,
       );
+      void persistReadingSessionDelta(
+        activeProject,
+        delta,
+        pagesReadDelta,
+        visitedPageCount,
+      ).catch(() => undefined);
     } catch {
       lastReadingSyncRef.current -= delta;
     }
-  }, [storageMode]);
+  }, [persistReadingSessionDelta, storageMode]);
 
   const flushReadingTimeForPageHide = useCallback(() => {
     recordVisibleSessionElapsed(true);
 
     const activeProject = projectRef.current;
     const delta = sessionSecondsRef.current - lastReadingSyncRef.current;
+    const visitedPageCount = visitedPageNumbersRef.current.size;
+    const pagesReadDelta = Math.max(visitedPageCount - syncedVisitedPageCountRef.current, 0);
 
     if (!activeProject || delta <= 0) {
       return;
@@ -411,15 +504,48 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       ...activeProject,
       totalReadingSeconds: total,
     };
+    const readingSessionInput = getNextReadingSessionInput(
+      readingSessionsRef.current,
+      activeProject.id,
+      delta,
+      pagesReadDelta,
+    );
 
     if (storageMode === 'cloud') {
       queueCloudReadingTimeKeepalive(activeProject, total, cloudAccessTokenRef.current);
+      if (readingSessionInput) {
+        queueCloudReadingSessionKeepalive(
+          activeProject,
+          readingSessionInput,
+          cloudAccessTokenRef.current,
+        );
+        syncedVisitedPageCountRef.current = Math.max(
+          syncedVisitedPageCountRef.current,
+          visitedPageCount,
+        );
+      }
       return;
     }
 
     void updateLocalReadingTime(activeProject, total)
       .then(() => clearReadingTimeBackup(activeProject.id))
       .catch(() => undefined);
+
+    if (readingSessionInput) {
+      void upsertLocalReadingSession(activeProject, readingSessionInput)
+        .then((updatedSession) => {
+          if (updatedSession) {
+            const nextSessions = upsertSessionInList(readingSessionsRef.current, updatedSession);
+            readingSessionsRef.current = nextSessions;
+            syncedVisitedPageCountRef.current = Math.max(
+              syncedVisitedPageCountRef.current,
+              visitedPageCount,
+            );
+            setReadingSessions(nextSessions);
+          }
+        })
+        .catch(() => undefined);
+    }
   }, [recordVisibleSessionElapsed, storageMode]);
 
   useEffect(() => {
@@ -1187,9 +1313,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         </div>
 
         <aside className={`reader-side right${rightOpen ? '' : ' is-collapsed'}`}>
-          <ProgressPanel project={{ ...project, currentPage }} />
+          <ProgressPanel project={{ ...project, currentPage }} readingSessions={readingSessions} />
           <DeadlineEditor project={project} onSave={saveDeadline} />
-          <ReadingStats project={project} />
+          <ReadingStats project={{ ...project, currentPage }} readingSessions={readingSessions} />
           <MarginaliaPanel
             highlights={highlights}
             editingHighlightId={editingHighlightId}
@@ -1593,6 +1719,39 @@ function queueCloudReadingTimeKeepalive(
   return true;
 }
 
+function queueCloudReadingSessionKeepalive(
+  project: PDFProject,
+  session: ReadingSessionUpsertInput,
+  accessToken: string | null,
+): boolean {
+  if (!isSupabaseConfigured || !accessToken || !SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    return false;
+  }
+
+  const url = `${SUPABASE_URL}/rest/v1/reading_sessions?on_conflict=project_id,date`;
+
+  void fetch(url, {
+    method: 'POST',
+    keepalive: true,
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      id: session.id ?? uuid(),
+      project_id: project.id,
+      user_id: project.userId,
+      date: session.date,
+      seconds: Math.max(Math.floor(session.seconds), 0),
+      pages_read: Math.max(Math.floor(session.pagesRead), 0),
+    }),
+  }).catch(() => undefined);
+
+  return true;
+}
+
 function getSteppedZoom(value: number, direction: 'in' | 'out'): number {
   const currentPercent = Math.round(value * 100);
   const nextPercent =
@@ -1645,4 +1804,53 @@ function sortHighlights(highlights: Highlight[]): Highlight[] {
 
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
+}
+
+function getNextReadingSessionInput(
+  sessions: ReadingSession[],
+  projectId: string,
+  secondsDelta: number,
+  pagesReadDelta: number,
+): ReadingSessionUpsertInput | null {
+  const safeSecondsDelta = Math.max(Math.floor(secondsDelta), 0);
+  const safePagesReadDelta = Math.max(Math.floor(pagesReadDelta), 0);
+
+  if (safeSecondsDelta <= 0 && safePagesReadDelta <= 0) {
+    return null;
+  }
+
+  const date = getLocalDateKey();
+  const currentSession = sessions.find(
+    (session) => session.projectId === projectId && session.date === date,
+  );
+
+  return {
+    id: currentSession?.id,
+    date,
+    seconds: (currentSession?.seconds ?? 0) + safeSecondsDelta,
+    pagesRead: (currentSession?.pagesRead ?? 0) + safePagesReadDelta,
+  };
+}
+
+function upsertSessionInList(
+  sessions: ReadingSession[],
+  nextSession: ReadingSession,
+): ReadingSession[] {
+  const existingSessionIndex = sessions.findIndex(
+    (session) =>
+      session.id === nextSession.id ||
+      (session.projectId === nextSession.projectId && session.date === nextSession.date),
+  );
+
+  if (existingSessionIndex === -1) {
+    return sortReadingSessions([...sessions, nextSession]);
+  }
+
+  return sortReadingSessions(
+    sessions.map((session, index) => (index === existingSessionIndex ? nextSession : session)),
+  );
+}
+
+function sortReadingSessions(sessions: ReadingSession[]): ReadingSession[] {
+  return sessions.slice().sort((a, b) => a.date.localeCompare(b.date));
 }

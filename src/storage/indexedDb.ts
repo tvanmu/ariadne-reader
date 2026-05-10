@@ -1,5 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import type { Chapter, Highlight, HighlightUpdateInput, PDFProject } from '../types';
+import type {
+  Chapter,
+  Highlight,
+  HighlightUpdateInput,
+  PDFProject,
+  ReadingSession,
+} from '../types';
 
 interface CachedPdfBlob {
   key: string;
@@ -11,6 +17,7 @@ class AriadneDatabase extends Dexie {
   projects!: Table<PDFProject, string>;
   blobs!: Table<CachedPdfBlob, string>;
   highlights!: Table<Highlight, string>;
+  readingSessions!: Table<ReadingSession, string>;
 
   constructor() {
     super('ariadne-reader');
@@ -34,6 +41,13 @@ class AriadneDatabase extends Dexie {
       projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
       blobs: 'key, savedAt',
       highlights: 'id, projectId, pageNumber, [projectId+pageNumber], createdAt',
+    });
+
+    this.version(5).stores({
+      projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
+      blobs: 'key, savedAt',
+      highlights: 'id, projectId, pageNumber, [projectId+pageNumber], createdAt',
+      readingSessions: 'id, projectId, date, [projectId+date]',
     });
   }
 }
@@ -65,9 +79,10 @@ export async function getProject(id: string): Promise<PDFProject | undefined> {
 export async function deleteProject(id: string): Promise<void> {
   const project = await getProject(id);
 
-  await db.transaction('rw', db.projects, db.blobs, db.highlights, async () => {
+  await db.transaction('rw', db.projects, db.blobs, db.highlights, db.readingSessions, async () => {
     await db.projects.delete(id);
     await db.highlights.where('projectId').equals(id).delete();
+    await db.readingSessions.where('projectId').equals(id).delete();
     if (project?.blobKey) {
       await db.blobs.delete(project.blobKey);
     }
@@ -145,6 +160,30 @@ export async function deleteHighlight(highlightId: string): Promise<void> {
   await db.highlights.delete(highlightId);
 }
 
+export async function fetchReadingSessions(projectId: string): Promise<ReadingSession[]> {
+  const sessions = await db.readingSessions.where('projectId').equals(projectId).toArray();
+
+  return sortReadingSessions(sessions);
+}
+
+export async function upsertReadingSession(session: ReadingSession): Promise<ReadingSession> {
+  const existingSession = await db.readingSessions
+    .where('[projectId+date]')
+    .equals([session.projectId, session.date])
+    .first();
+  const nextSession = existingSession
+    ? {
+        ...existingSession,
+        seconds: session.seconds,
+        pagesRead: session.pagesRead,
+      }
+    : session;
+
+  await db.readingSessions.put(nextSession);
+
+  return nextSession;
+}
+
 function withProjectDefaults(project: PDFProject): PDFProject {
   return {
     ...project,
@@ -161,4 +200,8 @@ function sortHighlights(highlights: Highlight[]): Highlight[] {
 
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
+}
+
+function sortReadingSessions(sessions: ReadingSession[]): ReadingSession[] {
+  return sessions.sort((a, b) => a.date.localeCompare(b.date));
 }

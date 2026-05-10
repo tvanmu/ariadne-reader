@@ -1,23 +1,26 @@
 import { MapPinned } from 'lucide-react';
-import type { PDFProject } from '../types';
+import type { PDFProject, ReadingSession } from '../types';
 import {
   calculateChapterProgress,
   calculateProgress,
   getCurrentChapter,
   getDeadlineStatus,
 } from '../utils/progress';
+import { getRecentLocalDateKeys } from '../utils/dateKeys';
 import MazeIcon from './MazeIcon';
 import SessionClock from './SessionClock';
 
 interface ProgressPanelProps {
   project: PDFProject;
+  readingSessions: ReadingSession[];
 }
 
-export default function ProgressPanel({ project }: ProgressPanelProps) {
+export default function ProgressPanel({ project, readingSessions }: ProgressPanelProps) {
   const progress = calculateProgress(project.currentPage, project.totalPages);
   const deadline = getDeadlineStatus(project);
   const currentChapter = getCurrentChapter(project.chapters, project.currentPage);
   const chapterProgress = calculateChapterProgress(currentChapter, project.currentPage);
+  const showPaceNudge = isBehindThreeDayPace(readingSessions, deadline.dailyTarget);
 
   return (
     <section className="reader-panel">
@@ -64,8 +67,28 @@ export default function ProgressPanel({ project }: ProgressPanelProps) {
           {chapterProgress !== null ? <small>{Math.round(chapterProgress)}% of chapter</small> : null}
         </div>
       </div>
+
+      {showPaceNudge ? (
+        <p className="thread-pace-nudge">You're a thread's length behind your pace.</p>
+      ) : null}
     </section>
   );
+}
+
+function isBehindThreeDayPace(
+  sessions: ReadingSession[],
+  dailyTarget: number | null,
+): boolean {
+  if (dailyTarget === null || dailyTarget <= 0) {
+    return false;
+  }
+
+  const recentDates = new Set(getRecentLocalDateKeys(3));
+  const recentPagesRead = sessions
+    .filter((session) => recentDates.has(session.date))
+    .reduce((total, session) => total + session.pagesRead, 0);
+
+  return recentPagesRead < dailyTarget * 3 * 0.6;
 }
 
 function formatPanelDuration(seconds: number): string {

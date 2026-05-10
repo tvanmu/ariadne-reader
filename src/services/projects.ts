@@ -7,6 +7,8 @@ import type {
   HighlightUpdateInput,
   PageTint,
   PDFProject,
+  ReadingSession,
+  ReadingSessionUpsertInput,
   ZoomMode,
 } from '../types';
 import { PDF_BUCKET_NAME, supabase } from '../lib/supabase';
@@ -62,6 +64,15 @@ type HighlightRow = {
   note: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type ReadingSessionRow = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  date: string;
+  seconds: number;
+  pages_read: number;
 };
 
 export async function fetchProjects(userId: string): Promise<PDFProject[]> {
@@ -396,6 +407,47 @@ export async function deleteHighlight(highlight: Highlight): Promise<void> {
   }
 }
 
+export async function fetchReadingSessions(projectId: string): Promise<ReadingSession[]> {
+  const { data, error } = await supabase
+    .from('reading_sessions')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('date', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as ReadingSessionRow[]).map(mapReadingSessionRow);
+}
+
+export async function upsertReadingSession(
+  project: PDFProject,
+  input: ReadingSessionUpsertInput,
+): Promise<ReadingSession> {
+  const { data, error } = await supabase
+    .from('reading_sessions')
+    .upsert(
+      {
+        id: input.id ?? uuid(),
+        project_id: project.id,
+        user_id: project.userId,
+        date: input.date,
+        seconds: Math.max(Math.floor(input.seconds), 0),
+        pages_read: Math.max(Math.floor(input.pagesRead), 0),
+      },
+      { onConflict: 'project_id,date' },
+    )
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapReadingSessionRow(data as ReadingSessionRow);
+}
+
 async function fetchChapters(projectIds: string[]): Promise<ChapterRow[]> {
   if (projectIds.length === 0) {
     return [];
@@ -454,6 +506,16 @@ function mapHighlightRow(row: HighlightRow): Highlight {
     note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapReadingSessionRow(row: ReadingSessionRow): ReadingSession {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    date: row.date,
+    seconds: row.seconds,
+    pagesRead: row.pages_read,
   };
 }
 
