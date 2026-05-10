@@ -1786,6 +1786,64 @@ h3 {
   white-space: nowrap;
 }
 
+.reader-modal-backdrop {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 7, 6, 0.54);
+  backdrop-filter: blur(4px);
+}
+
+.reader-shortcuts-modal {
+  width: min(480px, 100%);
+  padding: 18px;
+  border: 1px solid rgba(184, 144, 102, 0.46);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(244, 239, 228, 0.06), transparent 44%),
+    rgba(18, 23, 19, 0.98);
+  box-shadow: 0 28px 78px rgba(5, 7, 6, 0.62);
+}
+
+.shortcut-grid {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(128px, auto) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.shortcut-row:last-child {
+  border-bottom: 0;
+}
+
+.shortcut-row kbd {
+  justify-self: start;
+  padding: 4px 7px;
+  border: 1px solid rgba(244, 239, 228, 0.16);
+  border-radius: 5px;
+  background: rgba(9, 12, 10, 0.62);
+  color: var(--ivory);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.shortcut-row span {
+  color: var(--ivory-dim);
+  font-size: 13px;
+}
+
 /* Save pip */
 
 .save-pip {

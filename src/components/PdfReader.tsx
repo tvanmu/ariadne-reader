@@ -115,6 +115,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [isSearching, setIsSearching] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -129,6 +130,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const lastSessionTickAtRef = useRef(Date.now());
   const cloudAccessTokenRef = useRef<string | null>(null);
   const searchTextCacheRef = useRef<Map<number, PageSearchText>>(new Map());
+  const pendingGoToFirstRef = useRef(false);
+  const pendingGoToFirstTimerRef = useRef<number | null>(null);
 
   const progress = useMemo(
     () => (project ? calculateProgress(currentPage, project.totalPages) : 0),
@@ -546,7 +549,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           return;
         }
 
-        const nextPage = Math.min(...intersectingPageNumbers);
+        const nextPage = isViewerScrolledToBottom(viewer)
+          ? pdfDocument.numPages
+          : Math.min(...intersectingPageNumbers);
         setCurrentPage(nextPage);
         setPageInput(String(nextPage));
       },
@@ -598,17 +603,129 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   }, [currentPage, pdfDocument, project?.id, saveProgress, scrollOffset, zoom, zoomMode]);
 
   useEffect(() => {
-    function handleSearchShortcut(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'f') {
-        event.preventDefault();
-        setSearchOpen(true);
+    function clearPendingGoToFirst() {
+      pendingGoToFirstRef.current = false;
+      if (pendingGoToFirstTimerRef.current) {
+        window.clearTimeout(pendingGoToFirstTimerRef.current);
+        pendingGoToFirstTimerRef.current = null;
       }
     }
 
-    window.addEventListener('keydown', handleSearchShortcut);
+    function armPendingGoToFirst() {
+      clearPendingGoToFirst();
+      pendingGoToFirstRef.current = true;
+      pendingGoToFirstTimerRef.current = window.setTimeout(clearPendingGoToFirst, 900);
+    }
 
-    return () => window.removeEventListener('keydown', handleSearchShortcut);
-  }, []);
+    function handleReaderShortcut(event: KeyboardEvent) {
+      if (!project) {
+        return;
+      }
+
+      if (shortcutsOpen) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setShortcutsOpen(false);
+        }
+        return;
+      }
+
+      if (isEditableShortcutTarget(event.target)) {
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'f') {
+        event.preventDefault();
+        setSearchOpen(true);
+        clearPendingGoToFirst();
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      switch (event.key) {
+        case 'j':
+        case 'ArrowDown':
+        case ' ':
+          event.preventDefault();
+          scrollToPage(currentPage + 1);
+          clearPendingGoToFirst();
+          return;
+        case 'k':
+        case 'ArrowUp':
+          event.preventDefault();
+          scrollToPage(currentPage - 1);
+          clearPendingGoToFirst();
+          return;
+        case 'g':
+          event.preventDefault();
+          if (pendingGoToFirstRef.current) {
+            scrollToPage(1, 'auto');
+            clearPendingGoToFirst();
+          } else {
+            armPendingGoToFirst();
+          }
+          return;
+        case 'G':
+          event.preventDefault();
+          scrollToPage(project.totalPages, 'auto');
+          clearPendingGoToFirst();
+          return;
+        case '+':
+        case '=':
+          event.preventDefault();
+          zoomManually('in');
+          clearPendingGoToFirst();
+          return;
+        case '-':
+          event.preventDefault();
+          zoomManually('out');
+          clearPendingGoToFirst();
+          return;
+        case '0':
+          event.preventDefault();
+          resetZoom();
+          clearPendingGoToFirst();
+          return;
+        case 'f':
+          event.preventDefault();
+          toggleFitWidthZoom();
+          clearPendingGoToFirst();
+          return;
+        case '[':
+          event.preventDefault();
+          setLeftOpen((open) => !open);
+          clearPendingGoToFirst();
+          return;
+        case ']':
+          event.preventDefault();
+          setRightOpen((open) => !open);
+          clearPendingGoToFirst();
+          return;
+        case '/':
+          event.preventDefault();
+          setSearchOpen(true);
+          clearPendingGoToFirst();
+          return;
+        case '?':
+          event.preventDefault();
+          setShortcutsOpen(true);
+          clearPendingGoToFirst();
+          return;
+        default:
+          clearPendingGoToFirst();
+      }
+    }
+
+    window.addEventListener('keydown', handleReaderShortcut);
+
+    return () => {
+      window.removeEventListener('keydown', handleReaderShortcut);
+      clearPendingGoToFirst();
+    };
+  }, [currentPage, project, shortcutsOpen, zoom, zoomMode]);
 
   useEffect(() => {
     if (!pdfDocument || !searchOpen) {
@@ -745,10 +862,18 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     setZoom((value) => getSteppedZoom(value, direction));
   }
 
+  function resetZoom() {
+    setZoomMode('manual');
+    setZoom(1);
+  }
+
+  function toggleFitWidthZoom() {
+    setZoomMode((mode) => (mode === 'fit-width' ? 'manual' : 'fit-width'));
+  }
+
   function cycleZoomMode() {
     if (zoomMode === 'fit-width') {
-      setZoomMode('manual');
-      setZoom(1);
+      resetZoom();
       return;
     }
 
@@ -868,6 +993,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           onClose={() => setSearchOpen(false)}
         />
       ) : null}
+      {shortcutsOpen ? <ShortcutCheatsheet onClose={() => setShortcutsOpen(false)} /> : null}
 
       <div className={`reader-grid${leftOpen ? ' left-open' : ''}${rightOpen ? ' right-open' : ''}`}>
         <aside className={`reader-side left${leftOpen ? '' : ' is-collapsed'}`}>
@@ -907,6 +1033,54 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         </aside>
       </div>
     </section>
+  );
+}
+
+interface ShortcutCheatsheetProps {
+  onClose: () => void;
+}
+
+function ShortcutCheatsheet({ onClose }: ShortcutCheatsheetProps) {
+  const shortcutRows = [
+    ['j / Down / Space', 'Next page'],
+    ['k / Up', 'Previous page'],
+    ['g then g', 'First page'],
+    ['Shift + G', 'Last page'],
+    ['+ / =', 'Zoom in'],
+    ['-', 'Zoom out'],
+    ['0', 'Reset zoom'],
+    ['f', 'Fit width'],
+    ['[', 'Left rail'],
+    [']', 'Thread rail'],
+    ['/', 'Search'],
+    ['?', 'Shortcuts'],
+  ];
+
+  return (
+    <div className="reader-modal-backdrop" onMouseDown={onClose}>
+      <section
+        className="reader-shortcuts-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reader-shortcuts-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="panel-heading">
+          <h2 id="reader-shortcuts-title">Shortcuts</h2>
+        </div>
+        <div className="shortcut-grid">
+          {shortcutRows.map(([keys, action]) => (
+            <div className="shortcut-row" key={keys}>
+              <kbd>{keys}</kbd>
+              <span>{action}</span>
+            </div>
+          ))}
+        </div>
+        <button className="small-button" type="button" onClick={onClose}>
+          Close
+        </button>
+      </section>
+    </div>
   );
 }
 
@@ -1155,6 +1329,23 @@ function yieldToMainThread(): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, 0);
   });
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target.isContentEditable ||
+    target.closest('[contenteditable="true"]') !== null
+  );
+}
+
+function isViewerScrolledToBottom(viewer: HTMLDivElement): boolean {
+  return Math.ceil(viewer.scrollTop + viewer.clientHeight) >= viewer.scrollHeight - 2;
 }
 
 function scheduleIdleWork(callback: () => void): IdleWorkHandle {
