@@ -51,6 +51,13 @@ export interface ReadingSessionUpsertInput {
   pagesRead: number;
 }
 
+export interface PdfOutlineItem {
+  id: string;
+  title: string;
+  pageNumber: number | null;
+  children: PdfOutlineItem[];
+}
+
 export interface SessionSummary {
   projectTitle: string;
   pagesRead: number;

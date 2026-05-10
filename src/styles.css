@@ -2193,6 +2193,39 @@ h3 {
   color: var(--ivory);
 }
 
+.chapter-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: -2px 0 14px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(9, 12, 10, 0.34);
+}
+
+.chapter-tab {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  text-transform: uppercase;
+  transition:
+    border-color 200ms var(--ease-out-cubic),
+    background 200ms var(--ease-out-cubic),
+    color 200ms var(--ease-out-cubic);
+}
+
+.chapter-tab:hover,
+.chapter-tab.is-active {
+  border-color: rgba(184, 144, 102, 0.34);
+  background: rgba(184, 144, 102, 0.1);
+  color: var(--ivory);
+}
+
 .chapter-form {
   margin-bottom: 16px;
 }
@@ -2250,6 +2283,69 @@ h3 {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+.outline-list {
+  display: grid;
+  gap: 6px;
+}
+
+.outline-list.nested {
+  margin-top: 6px;
+}
+
+.outline-node {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.outline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(9, 12, 10, 0.38);
+  color: var(--ivory);
+  text-align: left;
+  transition:
+    border-color 200ms var(--ease-out-cubic),
+    background 200ms var(--ease-out-cubic),
+    color 200ms var(--ease-out-cubic);
+}
+
+.outline-row:hover:not(:disabled) {
+  border-color: rgba(184, 144, 102, 0.36);
+  background: rgba(184, 144, 102, 0.08);
+}
+
+.outline-row:disabled {
+  cursor: default;
+}
+
+.outline-row.is-muted {
+  color: var(--ivory-dim);
+}
+
+.outline-row span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-row small {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .marginalia-list {

@@ -5,6 +5,7 @@ import type {
   HighlightCreateInput,
   PageTint,
   PDFProject,
+  PdfOutlineItem,
   ReadingSession,
   ReadingSessionUpsertInput,
   SessionSummary,
@@ -33,7 +34,7 @@ import {
   updateCloudReadingTime,
   upsertReadingSession as upsertCloudReadingSession,
 } from '../services/projects';
-import { extractChaptersFromOutline } from '../services/pdfOutline';
+import { extractChaptersFromOutline, extractOutlineItems } from '../services/pdfOutline';
 import {
   createHighlight as createLocalHighlight,
   deleteHighlight as deleteLocalHighlight,
@@ -138,6 +139,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
   const [estimatedPageSize, setEstimatedPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [outlineChapters, setOutlineChapters] = useState<PDFProject['chapters']>([]);
+  const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
   const [intersectingPageNumbers, setIntersectingPageNumbers] = useState<Set<number>>(
     () => new Set([1]),
   );
@@ -327,6 +329,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setEstimatedPageSize(DEFAULT_PAGE_SIZE);
       setPageSizes({});
       setOutlineChapters([]);
+      setOutlineItems([]);
       setPageTint('paper');
       searchTextCacheRef.current.clear();
       setSearchMatches([]);
@@ -674,20 +677,26 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   useEffect(() => {
     if (!pdfDocument) {
       setOutlineChapters([]);
+      setOutlineItems([]);
       return;
     }
 
     let active = true;
 
-    extractChaptersFromOutline(pdfDocument)
-      .then((chapters) => {
+    Promise.all([
+      extractChaptersFromOutline(pdfDocument).catch(() => []),
+      extractOutlineItems(pdfDocument).catch(() => []),
+    ])
+      .then(([chapters, items]) => {
         if (active) {
           setOutlineChapters(chapters);
+          setOutlineItems(items);
         }
       })
       .catch(() => {
         if (active) {
           setOutlineChapters([]);
+          setOutlineItems([]);
         }
       });
 
@@ -1308,7 +1317,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
             chapters={project.chapters}
             currentPage={currentPage}
             outlineChapters={outlineChapters}
+            outlineItems={outlineItems}
             totalPages={project.totalPages}
+            onJumpToPage={scrollToPage}
             onSave={saveChapters}
           />
         </aside>

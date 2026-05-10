@@ -1,4 +1,4 @@
-import type { Chapter } from '../types';
+import type { Chapter, PdfOutlineItem } from '../types';
 import { pdfjsLib } from '../lib/pdf';
 import { clampPage } from '../utils/progress';
 import { uuid } from '../utils/uuid';
@@ -8,6 +8,7 @@ type PdfDocument = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>;
 interface PdfOutlineEntry {
   title: string;
   dest: string | unknown[] | null;
+  items?: PdfOutlineEntry[];
 }
 
 interface PdfPageRef {
@@ -47,6 +48,41 @@ export async function extractChaptersFromOutline(pdfDocument: PdfDocument): Prom
       startPage: chapterStart.startPage,
       endPage: (sortedStarts[index + 1]?.startPage ?? pdfDocument.numPages + 1) - 1,
     }));
+}
+
+export async function extractOutlineItems(pdfDocument: PdfDocument): Promise<PdfOutlineItem[]> {
+  const outline = ((await pdfDocument.getOutline()) ?? []) as PdfOutlineEntry[];
+  return resolveOutlineItems(pdfDocument, outline, 'outline');
+}
+
+async function resolveOutlineItems(
+  pdfDocument: PdfDocument,
+  entries: PdfOutlineEntry[],
+  parentId: string,
+): Promise<PdfOutlineItem[]> {
+  const items: PdfOutlineItem[] = [];
+
+  for (const [index, entry] of entries.entries()) {
+    const pageNumber = await resolveOutlinePage(pdfDocument, entry.dest).catch(() => null);
+    const children = await resolveOutlineItems(
+      pdfDocument,
+      entry.items ?? [],
+      `${parentId}-${index}`,
+    );
+
+    if (!pageNumber && children.length === 0) {
+      continue;
+    }
+
+    items.push({
+      id: `${parentId}-${index}-${pageNumber ?? 'group'}`,
+      title: entry.title.trim() || (pageNumber ? `Page ${pageNumber}` : 'Untitled'),
+      pageNumber,
+      children,
+    });
+  }
+
+  return items;
 }
 
 async function resolveOutlinePage(
