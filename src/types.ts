@@ -7,6 +7,34 @@ export interface Chapter {
 
 export type ZoomMode = 'manual' | 'fit-width';
 export type PageTint = 'paper' | 'sepia' | 'night';
+export type HighlightColor = 'thread' | 'sun' | 'olive' | 'wine';
+
+export interface HighlightRange {
+  itemIndex: number;
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface Highlight {
+  id: string;
+  projectId: string;
+  pageNumber: number;
+  ranges: HighlightRange[];
+  excerpt: string;
+  color: HighlightColor;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type HighlightCreateInput = Pick<
+  Highlight,
+  'pageNumber' | 'ranges' | 'excerpt' | 'color' | 'note'
+>;
+
+export type HighlightUpdateInput = Partial<
+  Pick<Highlight, 'pageNumber' | 'ranges' | 'excerpt' | 'color' | 'note'>
+>;
 
 export interface PDFProject {
   id: string;

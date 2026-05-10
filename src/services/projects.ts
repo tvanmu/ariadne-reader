@@ -1,4 +1,14 @@
-import type { Chapter, PageTint, PDFProject, ZoomMode } from '../types';
+import type {
+  Chapter,
+  Highlight,
+  HighlightColor,
+  HighlightCreateInput,
+  HighlightRange,
+  HighlightUpdateInput,
+  PageTint,
+  PDFProject,
+  ZoomMode,
+} from '../types';
 import { PDF_BUCKET_NAME, supabase } from '../lib/supabase';
 import { clampPage } from '../utils/progress';
 import { uuid } from '../utils/uuid';
@@ -39,6 +49,19 @@ type ChapterRow = {
   title: string;
   start_page: number;
   end_page: number;
+};
+
+type HighlightRow = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  page_number: number;
+  ranges: unknown;
+  excerpt: string;
+  color: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export async function fetchProjects(userId: string): Promise<PDFProject[]> {
@@ -299,6 +322,80 @@ export async function updateCloudChapters(
   return nextProject;
 }
 
+export async function fetchHighlights(projectId: string): Promise<Highlight[]> {
+  const { data, error } = await supabase
+    .from('highlights')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('page_number', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as HighlightRow[]).map(mapHighlightRow);
+}
+
+export async function createHighlight(
+  project: PDFProject,
+  input: HighlightCreateInput,
+): Promise<Highlight> {
+  const { data, error } = await supabase
+    .from('highlights')
+    .insert({
+      id: uuid(),
+      project_id: project.id,
+      user_id: project.userId,
+      page_number: input.pageNumber,
+      ranges: normalizeRanges(input.ranges),
+      excerpt: input.excerpt.trim(),
+      color: input.color,
+      note: normalizeNote(input.note),
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapHighlightRow(data as HighlightRow);
+}
+
+export async function updateHighlight(
+  highlight: Highlight,
+  updates: HighlightUpdateInput,
+): Promise<Highlight> {
+  const payload = normalizeHighlightUpdatePayload(updates);
+
+  const { data, error } = await supabase
+    .from('highlights')
+    .update(payload)
+    .eq('id', highlight.id)
+    .eq('project_id', highlight.projectId)
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapHighlightRow(data as HighlightRow);
+}
+
+export async function deleteHighlight(highlight: Highlight): Promise<void> {
+  const { error } = await supabase
+    .from('highlights')
+    .delete()
+    .eq('id', highlight.id)
+    .eq('project_id', highlight.projectId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 async function fetchChapters(projectIds: string[]): Promise<ChapterRow[]> {
   if (projectIds.length === 0) {
     return [];
@@ -346,6 +443,20 @@ function mapProjectRow(row: ProjectRow, chapterRows: ChapterRow[]): PDFProject {
   };
 }
 
+function mapHighlightRow(row: HighlightRow): Highlight {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    pageNumber: row.page_number,
+    ranges: toHighlightRanges(row.ranges),
+    excerpt: row.excerpt,
+    color: toHighlightColor(row.color),
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function chapterToRow(project: PDFProject) {
   return (chapter: Chapter): ChapterRow => ({
     id: chapter.id,
@@ -367,4 +478,82 @@ function toPageTint(value: string | null | undefined): PageTint {
   }
 
   return 'paper';
+}
+
+function toHighlightColor(value: string | null | undefined): HighlightColor {
+  if (value === 'sun' || value === 'olive' || value === 'wine') {
+    return value;
+  }
+
+  return 'thread';
+}
+
+function toHighlightRanges(value: unknown): HighlightRange[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return normalizeRanges(
+    value
+      .map((range) => {
+        if (!range || typeof range !== 'object') {
+          return null;
+        }
+
+        const candidate = range as Partial<HighlightRange>;
+        return {
+          itemIndex: Number(candidate.itemIndex),
+          startOffset: Number(candidate.startOffset),
+          endOffset: Number(candidate.endOffset),
+        };
+      })
+      .filter((range): range is HighlightRange => range !== null),
+  );
+}
+
+function normalizeHighlightUpdatePayload(updates: HighlightUpdateInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.pageNumber !== undefined) {
+    payload.page_number = updates.pageNumber;
+  }
+
+  if (updates.ranges !== undefined) {
+    payload.ranges = normalizeRanges(updates.ranges);
+  }
+
+  if (updates.excerpt !== undefined) {
+    payload.excerpt = updates.excerpt.trim();
+  }
+
+  if (updates.color !== undefined) {
+    payload.color = updates.color;
+  }
+
+  if ('note' in updates) {
+    payload.note = normalizeNote(updates.note ?? null);
+  }
+
+  return payload;
+}
+
+function normalizeRanges(ranges: HighlightRange[]): HighlightRange[] {
+  return ranges
+    .map((range) => ({
+      itemIndex: Math.max(Math.floor(range.itemIndex), 0),
+      startOffset: Math.max(Math.floor(range.startOffset), 0),
+      endOffset: Math.max(Math.floor(range.endOffset), 0),
+    }))
+    .filter((range) => range.endOffset > range.startOffset);
+}
+
+function normalizeNote(note: string | null): string | null {
+  if (note === null) {
+    return null;
+  }
+
+  const trimmedNote = note.trim().slice(0, 2000);
+  return trimmedNote.length > 0 ? trimmedNote : null;
 }

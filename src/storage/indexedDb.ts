@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Chapter, PDFProject } from '../types';
+import type { Chapter, Highlight, HighlightUpdateInput, PDFProject } from '../types';
 
 interface CachedPdfBlob {
   key: string;
@@ -10,6 +10,7 @@ interface CachedPdfBlob {
 class AriadneDatabase extends Dexie {
   projects!: Table<PDFProject, string>;
   blobs!: Table<CachedPdfBlob, string>;
+  highlights!: Table<Highlight, string>;
 
   constructor() {
     super('ariadne-reader');
@@ -27,6 +28,12 @@ class AriadneDatabase extends Dexie {
     this.version(3).stores({
       projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
       blobs: 'key, savedAt',
+    });
+
+    this.version(4).stores({
+      projects: 'id, userId, fileName, uploadedAt, lastOpenedAt',
+      blobs: 'key, savedAt',
+      highlights: 'id, projectId, pageNumber, [projectId+pageNumber], createdAt',
     });
   }
 }
@@ -58,8 +65,9 @@ export async function getProject(id: string): Promise<PDFProject | undefined> {
 export async function deleteProject(id: string): Promise<void> {
   const project = await getProject(id);
 
-  await db.transaction('rw', db.projects, db.blobs, async () => {
+  await db.transaction('rw', db.projects, db.blobs, db.highlights, async () => {
     await db.projects.delete(id);
+    await db.highlights.where('projectId').equals(id).delete();
     if (project?.blobKey) {
       await db.blobs.delete(project.blobKey);
     }
@@ -103,10 +111,54 @@ export async function updateReadingTime(
   await db.projects.update(projectId, { totalReadingSeconds });
 }
 
+export async function fetchHighlights(projectId: string): Promise<Highlight[]> {
+  const highlights = await db.highlights.where('projectId').equals(projectId).toArray();
+
+  return sortHighlights(highlights);
+}
+
+export async function createHighlight(highlight: Highlight): Promise<void> {
+  await db.highlights.put(highlight);
+}
+
+export async function updateHighlight(
+  highlightId: string,
+  updates: HighlightUpdateInput & { updatedAt: string },
+): Promise<Highlight> {
+  const existingHighlight = await db.highlights.get(highlightId);
+
+  if (!existingHighlight) {
+    throw new Error('This highlight could not be found.');
+  }
+
+  const nextHighlight = {
+    ...existingHighlight,
+    ...updates,
+  };
+
+  await db.highlights.put(nextHighlight);
+
+  return nextHighlight;
+}
+
+export async function deleteHighlight(highlightId: string): Promise<void> {
+  await db.highlights.delete(highlightId);
+}
+
 function withProjectDefaults(project: PDFProject): PDFProject {
   return {
     ...project,
     zoomMode: project.zoomMode ?? 'manual',
     pageTint: project.pageTint ?? 'paper',
   };
+}
+
+function sortHighlights(highlights: Highlight[]): Highlight[] {
+  return highlights.sort((a, b) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber;
+    }
+
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { PageTint, PDFProject, ZoomMode } from '../types';
+import type { Highlight, HighlightCreateInput, PageTint, PDFProject, ZoomMode } from '../types';
 import { pdfjsLib } from '../lib/pdf';
 import {
   isSupabaseConfigured,
@@ -11,8 +11,12 @@ import {
 import LabyrinthMark from './LabyrinthMark';
 import { getPdfBlob } from '../storage/indexedDb';
 import {
+  createHighlight as createCloudHighlight,
+  deleteHighlight as deleteCloudHighlight,
   downloadPdfBlob,
+  fetchHighlights as fetchCloudHighlights,
   fetchProject,
+  updateHighlight as updateCloudHighlight,
   updateCloudChapters,
   updateCloudDeadline,
   updateCloudProgress,
@@ -20,8 +24,12 @@ import {
 } from '../services/projects';
 import { extractChaptersFromOutline } from '../services/pdfOutline';
 import {
+  createHighlight as createLocalHighlight,
+  deleteHighlight as deleteLocalHighlight,
+  fetchHighlights as fetchLocalHighlights,
   fetchLocalProject,
   getLocalPdfBlob,
+  updateHighlight as updateLocalHighlight,
   updateLocalChapters,
   updateLocalDeadline,
   updateLocalProgress,
@@ -39,6 +47,7 @@ import {
 } from '../utils/sessionClock';
 import ChapterPanel from './ChapterPanel';
 import DeadlineEditor from './DeadlineEditor';
+import MarginaliaPanel from './MarginaliaPanel';
 import PdfTextLayer from './PdfTextLayer';
 import PdfToolbar from './PdfToolbar';
 import ProgressPanel from './ProgressPanel';
@@ -62,6 +71,7 @@ const PAGE_SIZE_BATCH_SIZE = 25;
 const SEARCH_DEBOUNCE_DELAY_MS = 200;
 const LEADING_PROGRESS_SAVE_INTERVAL_MS = 4000;
 const TRAILING_PROGRESS_SAVE_DELAY_MS = 1200;
+const EMPTY_HIGHLIGHTS: Highlight[] = [];
 const DEFAULT_PAGE_SIZE: PageSize = {
   width: 826,
   height: 1069,
@@ -119,6 +129,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [editingHighlightId, setEditingHighlightId] = useState<string | null>(null);
 
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -142,6 +154,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   );
   const activeSearchMatch = activeSearchMatchIndex >= 0 ? searchMatches[activeSearchMatchIndex] : null;
   const visibleSearchQuery = searchOpen ? searchQuery.trim() : '';
+  const highlightsByPage = useMemo(() => groupHighlightsByPage(highlights), [highlights]);
   const renderedPageNumbers = useMemo(() => {
     if (!pdfDocument) {
       return new Set<number>();
@@ -250,6 +263,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setActiveSearchMatchIndex(-1);
       setSearchedPageCount(0);
       setIsSearching(false);
+      setHighlights([]);
+      setEditingHighlightId(null);
 
       try {
         const loadedProject =
@@ -269,6 +284,23 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         setZoom(projectWithBackedUpTime.zoom);
         setZoomMode(projectWithBackedUpTime.zoomMode);
         setPageTint(projectWithBackedUpTime.pageTint);
+
+        const highlightsPromise =
+          storageMode === 'cloud'
+            ? fetchCloudHighlights(projectWithBackedUpTime.id)
+            : fetchLocalHighlights(projectWithBackedUpTime.id);
+
+        highlightsPromise
+          .then((loadedHighlights) => {
+            if (active) {
+              setHighlights(sortHighlights(loadedHighlights));
+            }
+          })
+          .catch(() => {
+            if (active) {
+              setHighlights([]);
+            }
+          });
 
         if (projectWithBackedUpTime.totalReadingSeconds > loadedProject.totalReadingSeconds) {
           void persistRecoveredReadingTime(projectWithBackedUpTime);
@@ -983,6 +1015,79 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     );
   }
 
+  async function saveHighlight(
+    input: HighlightCreateInput,
+    options: { openNote: boolean },
+  ): Promise<void> {
+    if (!project) {
+      return;
+    }
+
+    setSaveState('saving');
+
+    try {
+      const highlight =
+        storageMode === 'cloud'
+          ? await createCloudHighlight(project, input)
+          : await createLocalHighlight(project, input);
+
+      setHighlights((currentHighlights) => sortHighlights([...currentHighlights, highlight]));
+      setSaveState('saved');
+
+      if (options.openNote) {
+        setRightOpen(true);
+        setEditingHighlightId(highlight.id);
+      }
+    } catch (caught) {
+      setSaveState('error');
+      throw caught;
+    }
+  }
+
+  async function saveHighlightNote(highlight: Highlight, note: string | null): Promise<void> {
+    setSaveState('saving');
+
+    try {
+      const updatedHighlight =
+        storageMode === 'cloud'
+          ? await updateCloudHighlight(highlight, { note })
+          : await updateLocalHighlight(highlight, { note });
+
+      setHighlights((currentHighlights) =>
+        sortHighlights(
+          currentHighlights.map((currentHighlight) =>
+            currentHighlight.id === updatedHighlight.id ? updatedHighlight : currentHighlight,
+          ),
+        ),
+      );
+      setSaveState('saved');
+    } catch (caught) {
+      setSaveState('error');
+      throw caught;
+    }
+  }
+
+  async function removeHighlight(highlight: Highlight): Promise<void> {
+    setSaveState('saving');
+
+    try {
+      if (storageMode === 'cloud') {
+        await deleteCloudHighlight(highlight);
+      } else {
+        await deleteLocalHighlight(highlight);
+      }
+
+      setHighlights((currentHighlights) =>
+        currentHighlights.filter((currentHighlight) => currentHighlight.id !== highlight.id),
+      );
+      setEditingHighlightId((highlightId) => (highlightId === highlight.id ? null : highlightId));
+      setSaveState('saved');
+    } catch (caught) {
+      setSaveState('error');
+      throw caught;
+    }
+  }
+
   if (loading) {
     return (
       <section className="reader-loading">
@@ -1071,7 +1176,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                   zoom={zoom}
                   pageTint={pageTint}
                   searchQuery={visibleSearchQuery}
+                  highlights={highlightsByPage.get(pageNumber) ?? EMPTY_HIGHLIGHTS}
                   isActiveSearchPage={activeSearchMatch?.pageNumber === pageNumber}
+                  onCreateHighlight={saveHighlight}
                   registerPage={registerPage}
                 />
               );
@@ -1083,6 +1190,14 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           <ProgressPanel project={{ ...project, currentPage }} />
           <DeadlineEditor project={project} onSave={saveDeadline} />
           <ReadingStats project={project} />
+          <MarginaliaPanel
+            highlights={highlights}
+            editingHighlightId={editingHighlightId}
+            onEditingHighlightChange={setEditingHighlightId}
+            onJumpToPage={scrollToPage}
+            onUpdateHighlight={saveHighlightNote}
+            onDeleteHighlight={removeHighlight}
+          />
         </aside>
       </div>
     </section>
@@ -1145,7 +1260,12 @@ interface PdfPageProps {
   zoom: number;
   pageTint: PageTint;
   searchQuery: string;
+  highlights: Highlight[];
   isActiveSearchPage: boolean;
+  onCreateHighlight: (
+    input: HighlightCreateInput,
+    options: { openNote: boolean },
+  ) => Promise<void>;
   registerPage: (pageNumber: number, node: HTMLDivElement | null) => void;
 }
 
@@ -1157,7 +1277,9 @@ function PdfPage({
   zoom,
   pageTint,
   searchQuery,
+  highlights,
   isActiveSearchPage,
+  onCreateHighlight,
   registerPage,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1245,7 +1367,9 @@ function PdfPage({
               pdfDocument={document}
               pageNumber={pageNumber}
               scale={zoom * PDF_BASE_SCALE}
+              highlights={highlights}
               searchQuery={searchQuery}
+              onCreateHighlight={onCreateHighlight}
             />
           </>
         ) : (
@@ -1495,4 +1619,30 @@ function getFitWidthZoom(viewer: HTMLDivElement, pageSize: PageSize): number {
 function parseCssPixels(value: string): number {
   const parsedValue = Number.parseFloat(value);
   return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function groupHighlightsByPage(highlights: Highlight[]): Map<number, Highlight[]> {
+  const highlightsByPage = new Map<number, Highlight[]>();
+
+  highlights.forEach((highlight) => {
+    const pageHighlights = highlightsByPage.get(highlight.pageNumber) ?? [];
+    pageHighlights.push(highlight);
+    highlightsByPage.set(highlight.pageNumber, pageHighlights);
+  });
+
+  highlightsByPage.forEach((pageHighlights, pageNumber) => {
+    highlightsByPage.set(pageNumber, sortHighlights(pageHighlights));
+  });
+
+  return highlightsByPage;
+}
+
+function sortHighlights(highlights: Highlight[]): Highlight[] {
+  return highlights.slice().sort((a, b) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber;
+    }
+
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
 }

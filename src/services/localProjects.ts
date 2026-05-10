@@ -1,6 +1,15 @@
-import type { Chapter, PDFProject } from '../types';
+import type {
+  Chapter,
+  Highlight,
+  HighlightCreateInput,
+  HighlightUpdateInput,
+  PDFProject,
+} from '../types';
 import {
+  createHighlight as createCachedHighlight,
   deleteProject as deleteCachedProject,
+  deleteHighlight as deleteCachedHighlight,
+  fetchHighlights as fetchCachedHighlights,
   getPdfBlob,
   getProject,
   getProjects,
@@ -8,6 +17,7 @@ import {
   saveProject,
   updateChapters as updateCachedChapters,
   updateDeadline as updateCachedDeadline,
+  updateHighlight as updateCachedHighlight,
   updateProgress as updateCachedProgress,
   updateReadingTime as updateCachedReadingTime,
 } from '../storage/indexedDb';
@@ -146,4 +156,89 @@ export async function updateLocalChapters(
     ...project,
     chapters: nextChapters,
   };
+}
+
+export async function fetchHighlights(projectId: string): Promise<Highlight[]> {
+  return fetchCachedHighlights(projectId);
+}
+
+export async function createHighlight(
+  project: PDFProject,
+  input: HighlightCreateInput,
+): Promise<Highlight> {
+  const now = new Date().toISOString();
+  const highlight: Highlight = {
+    id: uuid(),
+    projectId: project.id,
+    pageNumber: input.pageNumber,
+    ranges: normalizeRanges(input.ranges),
+    excerpt: input.excerpt.trim(),
+    color: input.color,
+    note: normalizeNote(input.note),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await createCachedHighlight(highlight);
+
+  return highlight;
+}
+
+export async function updateHighlight(
+  highlight: Highlight,
+  updates: HighlightUpdateInput,
+): Promise<Highlight> {
+  return updateCachedHighlight(highlight.id, {
+    ...normalizeHighlightUpdates(updates),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function deleteHighlight(highlight: Highlight): Promise<void> {
+  await deleteCachedHighlight(highlight.id);
+}
+
+function normalizeHighlightUpdates(updates: HighlightUpdateInput): HighlightUpdateInput {
+  const nextUpdates: HighlightUpdateInput = {};
+
+  if (updates.pageNumber !== undefined) {
+    nextUpdates.pageNumber = updates.pageNumber;
+  }
+
+  if (updates.ranges !== undefined) {
+    nextUpdates.ranges = normalizeRanges(updates.ranges);
+  }
+
+  if (updates.excerpt !== undefined) {
+    nextUpdates.excerpt = updates.excerpt.trim();
+  }
+
+  if (updates.color !== undefined) {
+    nextUpdates.color = updates.color;
+  }
+
+  if ('note' in updates) {
+    nextUpdates.note = normalizeNote(updates.note ?? null);
+  }
+
+  return nextUpdates;
+}
+
+function normalizeRanges(ranges: Highlight['ranges']): Highlight['ranges'] {
+  return ranges
+    .map((range) => ({
+      itemIndex: Math.max(Math.floor(range.itemIndex), 0),
+      startOffset: Math.max(Math.floor(range.startOffset), 0),
+      endOffset: Math.max(Math.floor(range.endOffset), 0),
+    }))
+    .filter((range) => range.endOffset > range.startOffset);
+}
+
+function normalizeNote(note: string | null): string | null {
+  if (note === null) {
+    return null;
+  }
+
+  const trimmedNote = note.trim().slice(0, 2000);
+  return trimmedNote.length > 0 ? trimmedNote : null;
 }
