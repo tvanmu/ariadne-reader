@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { PDFProject } from '../types';
 import { pdfjsLib } from '../lib/pdf';
+import {
+  isSupabaseConfigured,
+  SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_URL,
+  supabase,
+} from '../lib/supabase';
 import LabyrinthMark from './LabyrinthMark';
 import { getPdfBlob } from '../storage/indexedDb';
 import {
@@ -20,6 +26,11 @@ import {
   updateLocalProgress,
   updateLocalReadingTime,
 } from '../services/localProjects';
+import {
+  applyReadingTimeBackup,
+  clearReadingTimeBackup,
+  saveReadingTimeBackup,
+} from '../services/readingTimeBackup';
 import { calculateProgress, clampPage } from '../utils/progress';
 import ChapterPanel from './ChapterPanel';
 import DeadlineEditor from './DeadlineEditor';
@@ -77,6 +88,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const projectRef = useRef<PDFProject | null>(null);
   const sessionSecondsRef = useRef(0);
   const lastReadingSyncRef = useRef(0);
+  const lastSessionTickAtRef = useRef(Date.now());
+  const cloudAccessTokenRef = useRef<string | null>(null);
 
   const progress = useMemo(
     () => (project ? calculateProgress(currentPage, project.totalPages) : 0),
@@ -106,6 +119,53 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     sessionSecondsRef.current = sessionSeconds;
   }, [sessionSeconds]);
 
+  const recordVisibleSessionElapsed = useCallback((force = false) => {
+    const isReadableMoment = force || document.visibilityState === 'visible';
+    const now = Date.now();
+
+    if (!isReadableMoment) {
+      lastSessionTickAtRef.current = now;
+      return sessionSecondsRef.current;
+    }
+
+    const elapsedSeconds = Math.floor((now - lastSessionTickAtRef.current) / 1000);
+
+    if (elapsedSeconds <= 0) {
+      return sessionSecondsRef.current;
+    }
+
+    lastSessionTickAtRef.current += elapsedSeconds * 1000;
+    const nextSessionSeconds = sessionSecondsRef.current + elapsedSeconds;
+    sessionSecondsRef.current = nextSessionSeconds;
+    setSessionSeconds(nextSessionSeconds);
+
+    return nextSessionSeconds;
+  }, []);
+
+  useEffect(() => {
+    if (storageMode !== 'cloud') {
+      cloudAccessTokenRef.current = null;
+      return;
+    }
+
+    let active = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) {
+        cloudAccessTokenRef.current = data.session?.access_token ?? null;
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      cloudAccessTokenRef.current = nextSession?.access_token ?? null;
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [storageMode]);
+
   useEffect(() => {
     let active = true;
     let loadedDocument: PdfDocument | null = null;
@@ -121,18 +181,24 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           return;
         }
 
-        setProject(loadedProject);
-        setCurrentPage(loadedProject.currentPage);
-        setPageInput(String(loadedProject.currentPage));
-        setScrollOffset(loadedProject.scrollOffset);
-        setZoom(loadedProject.zoom);
+        const projectWithBackedUpTime = applyReadingTimeBackup(loadedProject);
 
-        const cachedBlob = await getPdfBlob(loadedProject.blobKey);
+        setProject(projectWithBackedUpTime);
+        setCurrentPage(projectWithBackedUpTime.currentPage);
+        setPageInput(String(projectWithBackedUpTime.currentPage));
+        setScrollOffset(projectWithBackedUpTime.scrollOffset);
+        setZoom(projectWithBackedUpTime.zoom);
+
+        if (projectWithBackedUpTime.totalReadingSeconds > loadedProject.totalReadingSeconds) {
+          void persistRecoveredReadingTime(projectWithBackedUpTime);
+        }
+
+        const cachedBlob = await getPdfBlob(projectWithBackedUpTime.blobKey);
         const pdfBlob =
           cachedBlob ??
           (storageMode === 'cloud'
-            ? await downloadPdfBlob(loadedProject)
-            : await getLocalPdfBlob(loadedProject));
+            ? await downloadPdfBlob(projectWithBackedUpTime)
+            : await getLocalPdfBlob(projectWithBackedUpTime));
         const buffer = await pdfBlob.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
         loadedDocument = await loadingTask.promise;
@@ -175,13 +241,11 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        setSessionSeconds((seconds) => seconds + 1);
-      }
+      recordVisibleSessionElapsed();
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [recordVisibleSessionElapsed]);
 
   const flushReadingTime = useCallback(async () => {
     const activeProject = projectRef.current;
@@ -193,12 +257,18 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     lastReadingSyncRef.current = sessionSecondsRef.current;
     const total = activeProject.totalReadingSeconds + delta;
+    saveReadingTimeBackup(activeProject.id, total);
 
     try {
       const updatedProject =
         storageMode === 'cloud'
           ? await updateCloudReadingTime(activeProject, total)
           : await updateLocalReadingTime(activeProject, total);
+      projectRef.current = {
+        ...activeProject,
+        totalReadingSeconds: updatedProject.totalReadingSeconds,
+      };
+      clearReadingTimeBackup(activeProject.id);
       setProject((current) =>
         current ? { ...current, totalReadingSeconds: updatedProject.totalReadingSeconds } : current,
       );
@@ -207,6 +277,34 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     }
   }, [storageMode]);
 
+  const flushReadingTimeForPageHide = useCallback(() => {
+    recordVisibleSessionElapsed(true);
+
+    const activeProject = projectRef.current;
+    const delta = sessionSecondsRef.current - lastReadingSyncRef.current;
+
+    if (!activeProject || delta <= 0) {
+      return;
+    }
+
+    lastReadingSyncRef.current = sessionSecondsRef.current;
+    const total = activeProject.totalReadingSeconds + delta;
+    saveReadingTimeBackup(activeProject.id, total);
+    projectRef.current = {
+      ...activeProject,
+      totalReadingSeconds: total,
+    };
+
+    if (storageMode === 'cloud') {
+      queueCloudReadingTimeKeepalive(activeProject, total, cloudAccessTokenRef.current);
+      return;
+    }
+
+    void updateLocalReadingTime(activeProject, total)
+      .then(() => clearReadingTimeBackup(activeProject.id))
+      .catch(() => undefined);
+  }, [recordVisibleSessionElapsed, storageMode]);
+
   useEffect(() => {
     if (sessionSeconds > 0 && sessionSeconds % 15 === 0) {
       void flushReadingTime();
@@ -214,10 +312,50 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   }, [flushReadingTime, sessionSeconds]);
 
   useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        recordVisibleSessionElapsed(true);
+        void flushReadingTime();
+      } else {
+        lastSessionTickAtRef.current = Date.now();
+      }
+    }
+
+    function handlePageHide() {
+      flushReadingTimeForPageHide();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      recordVisibleSessionElapsed(true);
       void flushReadingTime();
     };
-  }, [flushReadingTime]);
+  }, [flushReadingTime, flushReadingTimeForPageHide, recordVisibleSessionElapsed]);
+
+  async function persistRecoveredReadingTime(recoveredProject: PDFProject) {
+    try {
+      const updatedProject =
+        storageMode === 'cloud'
+          ? await updateCloudReadingTime(recoveredProject, recoveredProject.totalReadingSeconds)
+          : await updateLocalReadingTime(recoveredProject, recoveredProject.totalReadingSeconds);
+      projectRef.current = {
+        ...recoveredProject,
+        totalReadingSeconds: updatedProject.totalReadingSeconds,
+      };
+      clearReadingTimeBackup(recoveredProject.id);
+      setProject((current) =>
+        current?.id === recoveredProject.id
+          ? { ...current, totalReadingSeconds: updatedProject.totalReadingSeconds }
+          : current,
+      );
+    } catch {
+      saveReadingTimeBackup(recoveredProject.id, recoveredProject.totalReadingSeconds);
+    }
+  }
 
   const saveProgress = useCallback(
     async (progressState: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom'>) => {
@@ -565,6 +703,34 @@ function getCanvasOutputScale(): number {
     Math.max(window.devicePixelRatio || 1, BASELINE_CANVAS_OUTPUT_SCALE),
     MAX_CANVAS_OUTPUT_SCALE,
   );
+}
+
+function queueCloudReadingTimeKeepalive(
+  project: PDFProject,
+  totalReadingSeconds: number,
+  accessToken: string | null,
+): boolean {
+  if (!isSupabaseConfigured || !accessToken || !SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    return false;
+  }
+
+  const safeSeconds = Math.max(Math.floor(totalReadingSeconds), 0);
+  const url = `${SUPABASE_URL}/rest/v1/pdf_projects?id=eq.${encodeURIComponent(project.id)}`;
+
+  // sendBeacon cannot provide the PATCH method or Supabase auth headers; keepalive is the unload-safe path here.
+  void fetch(url, {
+    method: 'PATCH',
+    keepalive: true,
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({ total_reading_seconds: safeSeconds }),
+  }).catch(() => undefined);
+
+  return true;
 }
 
 function getSteppedZoom(value: number, direction: 'in' | 'out'): number {

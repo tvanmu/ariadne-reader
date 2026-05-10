@@ -7,6 +7,8 @@ const supabaseKey =
   '';
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
+export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_PUBLISHABLE_KEY = supabaseKey;
 
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
