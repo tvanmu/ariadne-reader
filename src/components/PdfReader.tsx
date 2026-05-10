@@ -36,6 +36,8 @@ const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP_PERCENT = 10;
 const PAGE_RENDER_RADIUS = 2;
+const LEADING_PROGRESS_SAVE_INTERVAL_MS = 4000;
+const TRAILING_PROGRESS_SAVE_DELAY_MS = 1200;
 const DEFAULT_PAGE_SIZE: PageSize = {
   width: 826,
   height: 1069,
@@ -70,6 +72,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const saveTimerRef = useRef<number | null>(null);
+  const lastProgressSavedAtRef = useRef(0);
   const hasRestoredRef = useRef(false);
   const projectRef = useRef<PDFProject | null>(null);
   const sessionSecondsRef = useRef(0);
@@ -216,6 +219,40 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     };
   }, [flushReadingTime]);
 
+  const saveProgress = useCallback(
+    async (progressState: Pick<PDFProject, 'currentPage' | 'scrollOffset' | 'zoom'>) => {
+      const activeProject = projectRef.current;
+      if (!activeProject) {
+        return;
+      }
+
+      setSaveState('saving');
+
+      try {
+        const updatedProject =
+          storageMode === 'cloud'
+            ? await updateCloudProgress(activeProject, progressState)
+            : await updateLocalProgress(activeProject, progressState);
+
+        setProject((current) =>
+          current
+            ? {
+                ...current,
+                currentPage: updatedProject.currentPage,
+                scrollOffset: updatedProject.scrollOffset,
+                zoom: updatedProject.zoom,
+                lastOpenedAt: updatedProject.lastOpenedAt,
+              }
+            : current,
+        );
+        setSaveState('saved');
+      } catch {
+        setSaveState('error');
+      }
+    },
+    [storageMode],
+  );
+
   useEffect(() => {
     if (!pdfDocument || !project || hasRestoredRef.current) {
       return;
@@ -238,55 +275,29 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       return;
     }
 
+    const progressState = { currentPage, scrollOffset, zoom };
+    const now = Date.now();
+
+    if (now - lastProgressSavedAtRef.current > LEADING_PROGRESS_SAVE_INTERVAL_MS) {
+      lastProgressSavedAtRef.current = now;
+      void saveProgress(progressState);
+    }
+
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
     }
 
-    saveTimerRef.current = window.setTimeout(async () => {
-      const activeProject = projectRef.current;
-      if (!activeProject) {
-        return;
-      }
-
-      setSaveState('saving');
-
-      try {
-        const updatedProject =
-          storageMode === 'cloud'
-            ? await updateCloudProgress(activeProject, {
-                currentPage,
-                scrollOffset,
-                zoom,
-              })
-            : await updateLocalProgress(activeProject, {
-                currentPage,
-                scrollOffset,
-                zoom,
-              });
-
-        setProject((current) =>
-          current
-            ? {
-                ...current,
-                currentPage: updatedProject.currentPage,
-                scrollOffset: updatedProject.scrollOffset,
-                zoom: updatedProject.zoom,
-                lastOpenedAt: updatedProject.lastOpenedAt,
-              }
-            : current,
-        );
-        setSaveState('saved');
-      } catch {
-        setSaveState('error');
-      }
-    }, 900);
+    saveTimerRef.current = window.setTimeout(() => {
+      lastProgressSavedAtRef.current = Date.now();
+      void saveProgress(progressState);
+    }, TRAILING_PROGRESS_SAVE_DELAY_MS);
 
     return () => {
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [currentPage, pdfDocument, project, scrollOffset, storageMode, zoom]);
+  }, [currentPage, pdfDocument, project?.id, saveProgress, scrollOffset, zoom]);
 
   function scrollToPage(page: number, behavior: ScrollBehavior = 'smooth') {
     const nextPage = project ? clampPage(page, project.totalPages) : page;
