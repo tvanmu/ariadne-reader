@@ -1644,6 +1644,7 @@ h3 {
 /* Reader */
 
 .reader-shell {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
@@ -1746,6 +1747,43 @@ h3 {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 760;
+}
+
+.reader-search-bar {
+  position: absolute;
+  z-index: 12;
+  top: 62px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 280px) minmax(112px, auto) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid rgba(184, 144, 102, 0.48);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, rgba(244, 239, 228, 0.07), transparent),
+    rgba(18, 23, 19, 0.96);
+  box-shadow: 0 18px 42px rgba(5, 7, 6, 0.44);
+  color: var(--muted);
+  transform: translateX(-50%);
+}
+
+.reader-search-bar input {
+  min-width: 0;
+  color: var(--ivory);
+}
+
+.reader-search-status {
+  min-width: 112px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* Save pip */
@@ -2125,6 +2163,17 @@ h3 {
 
 .pdf-text-layer ::selection {
   background: rgba(173, 47, 47, 0.28);
+}
+
+.pdf-text-layer span.is-search-match {
+  border-radius: 2px;
+  background: rgba(184, 144, 102, 0.3);
+  box-shadow: 0 0 0 1px rgba(125, 91, 62, 0.18);
+}
+
+.pdf-page-frame.is-search-active .pdf-text-layer span.is-search-match {
+  background: rgba(173, 47, 47, 0.32);
+  box-shadow: 0 0 0 1px rgba(173, 47, 47, 0.32);
 }
 
 .pdf-text-layer br::selection {

@@ -42,8 +42,12 @@ import PdfTextLayer from './PdfTextLayer';
 import PdfToolbar from './PdfToolbar';
 import ProgressPanel from './ProgressPanel';
 import ReadingStats from './ReadingStats';
+import SearchBar from './SearchBar';
 
 type PdfDocument = Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>;
+type PdfPageProxy = Awaited<ReturnType<PdfDocument['getPage']>>;
+type PdfTextContent = Awaited<ReturnType<PdfPageProxy['getTextContent']>>;
+type PdfTextContentItem = PdfTextContent['items'][number];
 
 const PDF_BASE_SCALE = 1.35;
 const BASELINE_CANVAS_OUTPUT_SCALE = 1;
@@ -53,6 +57,7 @@ const MAX_ZOOM = 2.4;
 const ZOOM_STEP_PERCENT = 10;
 const PAGE_RENDER_RADIUS = 2;
 const PAGE_SIZE_BATCH_SIZE = 25;
+const SEARCH_DEBOUNCE_DELAY_MS = 200;
 const LEADING_PROGRESS_SAVE_INTERVAL_MS = 4000;
 const TRAILING_PROGRESS_SAVE_DELAY_MS = 1200;
 const DEFAULT_PAGE_SIZE: PageSize = {
@@ -69,6 +74,15 @@ type IdleWorkHandle = {
   type: 'idle' | 'timeout';
   id: number;
 };
+
+interface SearchMatch {
+  id: string;
+  pageNumber: number;
+}
+
+interface PageSearchText {
+  normalizedText: string;
+}
 
 interface PdfReaderProps {
   projectId: string;
@@ -91,6 +105,12 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [intersectingPageNumbers, setIntersectingPageNumbers] = useState<Set<number>>(
     () => new Set([1]),
   );
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([]);
+  const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(-1);
+  const [searchedPageCount, setSearchedPageCount] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
@@ -106,11 +126,14 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const lastReadingSyncRef = useRef(0);
   const lastSessionTickAtRef = useRef(Date.now());
   const cloudAccessTokenRef = useRef<string | null>(null);
+  const searchTextCacheRef = useRef<Map<number, PageSearchText>>(new Map());
 
   const progress = useMemo(
     () => (project ? calculateProgress(currentPage, project.totalPages) : 0),
     [currentPage, project],
   );
+  const activeSearchMatch = activeSearchMatchIndex >= 0 ? searchMatches[activeSearchMatchIndex] : null;
+  const visibleSearchQuery = searchOpen ? searchQuery.trim() : '';
   const renderedPageNumbers = useMemo(() => {
     if (!pdfDocument) {
       return new Set<number>();
@@ -197,6 +220,11 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       resetSessionClock();
       setEstimatedPageSize(DEFAULT_PAGE_SIZE);
       setPageSizes({});
+      searchTextCacheRef.current.clear();
+      setSearchMatches([]);
+      setActiveSearchMatchIndex(-1);
+      setSearchedPageCount(0);
+      setIsSearching(false);
 
       try {
         const loadedProject =
@@ -532,6 +560,110 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     };
   }, [currentPage, pdfDocument, project?.id, saveProgress, scrollOffset, zoom]);
 
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'f') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+
+    window.addEventListener('keydown', handleSearchShortcut);
+
+    return () => window.removeEventListener('keydown', handleSearchShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (!pdfDocument || !searchOpen) {
+      setIsSearching(false);
+      return;
+    }
+
+    const normalizedQuery = normalizeSearchText(searchQuery);
+
+    if (!normalizedQuery) {
+      setSearchMatches([]);
+      setActiveSearchMatchIndex(-1);
+      setSearchedPageCount(0);
+      setIsSearching(false);
+      return;
+    }
+
+    const searchableDocument = pdfDocument;
+    let cancelled = false;
+    const searchTimer = window.setTimeout(() => {
+      void searchDocument();
+    }, SEARCH_DEBOUNCE_DELAY_MS);
+
+    async function searchDocument() {
+      const nextMatches: SearchMatch[] = [];
+      setSearchMatches([]);
+      setActiveSearchMatchIndex(-1);
+      setSearchedPageCount(0);
+      setIsSearching(true);
+
+      for (let pageNumber = 1; pageNumber <= searchableDocument.numPages; pageNumber += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        const pageText = await readPageSearchText(
+          searchableDocument,
+          pageNumber,
+          searchTextCacheRef.current,
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        nextMatches.push(...findSearchMatches(pageText, normalizedQuery, pageNumber));
+        setSearchedPageCount(pageNumber);
+
+        if (nextMatches.length > 0) {
+          const streamedMatches = [...nextMatches];
+          setSearchMatches(streamedMatches);
+          setActiveSearchMatchIndex((matchIndex) => (matchIndex === -1 ? 0 : matchIndex));
+        }
+
+        if (pageNumber % 8 === 0) {
+          await yieldToMainThread();
+        }
+      }
+
+      if (!cancelled) {
+        setSearchMatches([...nextMatches]);
+        setActiveSearchMatchIndex((matchIndex) => {
+          if (nextMatches.length === 0) {
+            return -1;
+          }
+
+          return matchIndex === -1 ? 0 : Math.min(matchIndex, nextMatches.length - 1);
+        });
+        setIsSearching(false);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(searchTimer);
+    };
+  }, [pdfDocument, searchOpen, searchQuery]);
+
+  useEffect(() => {
+    if (!activeSearchMatch || !searchOpen) {
+      return;
+    }
+
+    scrollToPage(activeSearchMatch.pageNumber);
+  }, [activeSearchMatch?.id, activeSearchMatch?.pageNumber, searchOpen]);
+
+  useEffect(() => {
+    if (activeSearchMatchIndex >= searchMatches.length) {
+      setActiveSearchMatchIndex(searchMatches.length > 0 ? searchMatches.length - 1 : -1);
+    }
+  }, [activeSearchMatchIndex, searchMatches.length]);
+
   function scrollToPage(page: number, behavior: ScrollBehavior = 'smooth') {
     const nextPage = project ? clampPage(page, project.totalPages) : page;
     const node = pageRefs.current.get(nextPage);
@@ -549,6 +681,26 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     }
 
     setScrollOffset(viewer.scrollTop);
+  }
+
+  function goToPreviousSearchMatch() {
+    if (searchMatches.length === 0) {
+      return;
+    }
+
+    setActiveSearchMatchIndex((matchIndex) =>
+      matchIndex <= 0 ? searchMatches.length - 1 : matchIndex - 1,
+    );
+  }
+
+  function goToNextSearchMatch() {
+    if (searchMatches.length === 0) {
+      return;
+    }
+
+    setActiveSearchMatchIndex((matchIndex) =>
+      matchIndex < 0 || matchIndex >= searchMatches.length - 1 ? 0 : matchIndex + 1,
+    );
   }
 
   const registerPage = useCallback((pageNumber: number, node: HTMLDivElement | null) => {
@@ -643,6 +795,20 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onZoomOut={() => setZoom((value) => getSteppedZoom(value, 'out'))}
         onCycleZoomMode={() => setZoom(1)}
       />
+      {searchOpen ? (
+        <SearchBar
+          query={searchQuery}
+          totalMatches={searchMatches.length}
+          activeMatchNumber={activeSearchMatchIndex >= 0 ? activeSearchMatchIndex + 1 : 0}
+          searchedPages={searchedPageCount}
+          totalPages={pdfDocument.numPages}
+          isSearching={isSearching}
+          onQueryChange={setSearchQuery}
+          onPrevious={goToPreviousSearchMatch}
+          onNext={goToNextSearchMatch}
+          onClose={() => setSearchOpen(false)}
+        />
+      ) : null}
 
       <div className={`reader-grid${leftOpen ? ' left-open' : ''}${rightOpen ? ' right-open' : ''}`}>
         <aside className={`reader-side left${leftOpen ? '' : ' is-collapsed'}`}>
@@ -666,6 +832,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
                   pageSize={pageSizes[pageNumber] ?? estimatedPageSize}
                   shouldRender={renderedPageNumbers.has(pageNumber)}
                   zoom={zoom}
+                  searchQuery={visibleSearchQuery}
+                  isActiveSearchPage={activeSearchMatch?.pageNumber === pageNumber}
                   registerPage={registerPage}
                 />
               );
@@ -689,10 +857,21 @@ interface PdfPageProps {
   pageSize: PageSize;
   shouldRender: boolean;
   zoom: number;
+  searchQuery: string;
+  isActiveSearchPage: boolean;
   registerPage: (pageNumber: number, node: HTMLDivElement | null) => void;
 }
 
-function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerPage }: PdfPageProps) {
+function PdfPage({
+  document,
+  pageNumber,
+  pageSize,
+  shouldRender,
+  zoom,
+  searchQuery,
+  isActiveSearchPage,
+  registerPage,
+}: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const displayWidth = Math.ceil(pageSize.width * zoom);
@@ -759,14 +938,23 @@ function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerP
   }, [document, pageNumber, shouldRender, zoom]);
 
   return (
-    <div className="pdf-page-frame" data-page-number={pageNumber} ref={pageFrameRef}>
+    <div
+      className={`pdf-page-frame${isActiveSearchPage ? ' is-search-active' : ''}`}
+      data-page-number={pageNumber}
+      ref={pageFrameRef}
+    >
       <div className="page-number-label">Page {pageNumber}</div>
       {renderError ? <p className="form-note error">{renderError}</p> : null}
       <div className="pdf-page-shell" style={{ width: displayWidth, height: displayHeight }}>
         {shouldRender ? (
           <>
             <canvas ref={canvasRef} />
-            <PdfTextLayer pdfDocument={document} pageNumber={pageNumber} scale={zoom * PDF_BASE_SCALE} />
+            <PdfTextLayer
+              pdfDocument={document}
+              pageNumber={pageNumber}
+              scale={zoom * PDF_BASE_SCALE}
+              searchQuery={searchQuery}
+            />
           </>
         ) : (
           <div className="pdf-page-placeholder" />
@@ -841,6 +1029,73 @@ async function readPageSize(document: PdfDocument, pageNumber: number): Promise<
     width: Math.ceil(viewport.width),
     height: Math.ceil(viewport.height),
   };
+}
+
+async function readPageSearchText(
+  document: PdfDocument,
+  pageNumber: number,
+  cache: Map<number, PageSearchText>,
+): Promise<PageSearchText> {
+  const cachedText = cache.get(pageNumber);
+  if (cachedText) {
+    return cachedText;
+  }
+
+  const page = await document.getPage(pageNumber);
+  const textContent = await page.getTextContent();
+  const text = textContent.items
+    .filter(isTextContentItem)
+    .map((item) => `${item.str}${item.hasEOL ? '\n' : ''}`)
+    .join('');
+  const pageSearchText = {
+    normalizedText: normalizeSearchText(text),
+  };
+
+  cache.set(pageNumber, pageSearchText);
+  page.cleanup();
+
+  return pageSearchText;
+}
+
+function isTextContentItem(
+  item: PdfTextContentItem,
+): item is PdfTextContentItem & { str: string; hasEOL: boolean } {
+  return 'str' in item;
+}
+
+function findSearchMatches(
+  pageText: PageSearchText,
+  normalizedQuery: string,
+  pageNumber: number,
+): SearchMatch[] {
+  const matches: SearchMatch[] = [];
+  let searchStart = 0;
+
+  while (searchStart < pageText.normalizedText.length) {
+    const matchIndex = pageText.normalizedText.indexOf(normalizedQuery, searchStart);
+
+    if (matchIndex === -1) {
+      break;
+    }
+
+    matches.push({
+      id: `${pageNumber}:${matchIndex}:${matches.length}`,
+      pageNumber,
+    });
+    searchStart = matchIndex + Math.max(normalizedQuery.length, 1);
+  }
+
+  return matches;
+}
+
+function normalizeSearchText(text: string): string {
+  return text.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 function scheduleIdleWork(callback: () => void): IdleWorkHandle {
