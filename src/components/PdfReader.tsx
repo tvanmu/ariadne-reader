@@ -405,7 +405,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onNext={() => scrollToPage(currentPage + 1)}
         onZoomIn={() => setZoom((value) => getSteppedZoom(value, 'in'))}
         onZoomOut={() => setZoom((value) => getSteppedZoom(value, 'out'))}
-        onResetZoom={() => setZoom(1)}
+        onCycleZoomMode={() => setZoom(1)}
       />
 
       <div className={`reader-grid${leftOpen ? ' left-open' : ''}${rightOpen ? ' right-open' : ''}`}>

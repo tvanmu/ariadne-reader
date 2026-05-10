@@ -5,7 +5,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  RotateCcw,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -29,7 +28,7 @@ interface PdfToolbarProps {
   onNext: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onResetZoom: () => void;
+  onCycleZoomMode: () => void;
 }
 
 export default function PdfToolbar({
@@ -50,7 +49,7 @@ export default function PdfToolbar({
   onNext,
   onZoomIn,
   onZoomOut,
-  onResetZoom,
+  onCycleZoomMode,
 }: PdfToolbarProps) {
   const roundedProgress = Math.round(progress);
 
@@ -110,14 +109,11 @@ export default function PdfToolbar({
         <button className="icon-button" type="button" onClick={onZoomOut} aria-label="Zoom out">
           <ZoomOut size={17} />
         </button>
-        <button className="zoom-pill" type="button" onClick={onResetZoom}>
+        <button className="zoom-pill" type="button" onClick={onCycleZoomMode} aria-label="Reset zoom to 100%">
           {Math.round(zoom * 100)}%
         </button>
         <button className="icon-button" type="button" onClick={onZoomIn} aria-label="Zoom in">
           <ZoomIn size={17} />
-        </button>
-        <button className="icon-button" type="button" onClick={onResetZoom} aria-label="Reset zoom">
-          <RotateCcw size={16} />
         </button>
       </div>
 
