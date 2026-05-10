@@ -348,7 +348,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       storageMode === 'cloud'
         ? await updateCloudDeadline(project, deadline)
         : await updateLocalDeadline(project, deadline);
-    setProject(updatedProject);
+    setProject((current) =>
+      current ? { ...current, deadline: updatedProject.deadline } : current,
+    );
   }
 
   async function saveChapters(chapters: PDFProject['chapters']) {
@@ -360,7 +362,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       storageMode === 'cloud'
         ? await updateCloudChapters(project, chapters)
         : await updateLocalChapters(project, chapters);
-    setProject(updatedProject);
+    setProject((current) =>
+      current ? { ...current, chapters: updatedProject.chapters } : current,
+    );
   }
 
   if (loading) {
