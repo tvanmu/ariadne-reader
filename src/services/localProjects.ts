@@ -12,6 +12,7 @@ import {
   updateReadingTime as updateCachedReadingTime,
 } from '../storage/indexedDb';
 import { clampPage } from '../utils/progress';
+import { uuid } from '../utils/uuid';
 import { sanitizeStorageFileName, titleFromFileName } from './fileHash';
 
 export const LOCAL_USER_ID = 'local-device';
@@ -37,7 +38,7 @@ export async function createLocalProjectFromPdf(input: {
   fileHash: string;
   totalPages: number;
 }): Promise<PDFProject> {
-  const projectId = crypto.randomUUID();
+  const projectId = uuid();
   const safeName = sanitizeStorageFileName(input.file.name) || `${projectId}.pdf`;
   const now = new Date().toISOString();
   const blobKey = `local/${projectId}/${safeName}`;

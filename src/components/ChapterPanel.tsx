@@ -6,6 +6,7 @@ import {
   getCurrentChapter,
   validateChapter,
 } from '../utils/progress';
+import { uuid } from '../utils/uuid';
 
 interface ChapterPanelProps {
   chapters: Chapter[];
@@ -53,7 +54,7 @@ export default function ChapterPanel({
     event.preventDefault();
 
     const nextChapter = {
-      id: draft.id ?? crypto.randomUUID(),
+      id: draft.id ?? uuid(),
       title: draft.title.trim(),
       startPage: Number(draft.startPage),
       endPage: Number(draft.endPage),

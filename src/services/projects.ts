@@ -1,6 +1,7 @@
 import type { Chapter, PDFProject } from '../types';
 import { PDF_BUCKET_NAME, supabase } from '../lib/supabase';
 import { clampPage } from '../utils/progress';
+import { uuid } from '../utils/uuid';
 import { sanitizeStorageFileName, titleFromFileName } from './fileHash';
 import {
   deleteProject as deleteCachedProject,
@@ -88,7 +89,7 @@ export async function createProjectFromPdf(input: {
   fileHash: string;
   totalPages: number;
 }): Promise<PDFProject> {
-  const projectId = crypto.randomUUID();
+  const projectId = uuid();
   const safeName = sanitizeStorageFileName(input.file.name) || `${projectId}.pdf`;
   const storagePath = `${input.userId}/${projectId}/${safeName}`;
   const now = new Date().toISOString();
