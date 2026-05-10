@@ -84,6 +84,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
   const [estimatedPageSize, setEstimatedPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
+  const [intersectingPageNumbers, setIntersectingPageNumbers] = useState<Set<number>>(
+    () => new Set([1]),
+  );
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
@@ -110,15 +113,20 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     }
 
     const pageNumbers = new Set<number>();
-    const startPage = Math.max(currentPage - PAGE_RENDER_RADIUS, 1);
-    const endPage = Math.min(currentPage + PAGE_RENDER_RADIUS, pdfDocument.numPages);
+    const anchorPageNumbers = new Set(intersectingPageNumbers);
+    anchorPageNumbers.add(currentPage);
 
-    for (let pageNumber = startPage; pageNumber <= endPage; pageNumber += 1) {
-      pageNumbers.add(pageNumber);
-    }
+    anchorPageNumbers.forEach((anchorPageNumber) => {
+      const startPage = Math.max(anchorPageNumber - PAGE_RENDER_RADIUS, 1);
+      const endPage = Math.min(anchorPageNumber + PAGE_RENDER_RADIUS, pdfDocument.numPages);
+
+      for (let pageNumber = startPage; pageNumber <= endPage; pageNumber += 1) {
+        pageNumbers.add(pageNumber);
+      }
+    });
 
     return pageNumbers;
-  }, [currentPage, pdfDocument]);
+  }, [currentPage, intersectingPageNumbers, pdfDocument]);
 
   useEffect(() => {
     projectRef.current = project;
@@ -198,6 +206,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         setProject(projectWithBackedUpTime);
         setCurrentPage(projectWithBackedUpTime.currentPage);
         setPageInput(String(projectWithBackedUpTime.currentPage));
+        setIntersectingPageNumbers(new Set([projectWithBackedUpTime.currentPage]));
         setScrollOffset(projectWithBackedUpTime.scrollOffset);
         setZoom(projectWithBackedUpTime.zoom);
 
@@ -443,6 +452,8 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     const observer = new IntersectionObserver(
       (entries) => {
+        let hasIntersectionChanges = false;
+
         entries.forEach((entry) => {
           const pageNumber = Number((entry.target as HTMLElement).dataset.pageNumber);
           if (!Number.isInteger(pageNumber)) {
@@ -450,11 +461,18 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           }
 
           if (entry.isIntersecting) {
-            intersectingPageNumbers.add(pageNumber);
-          } else {
-            intersectingPageNumbers.delete(pageNumber);
+            if (!intersectingPageNumbers.has(pageNumber)) {
+              intersectingPageNumbers.add(pageNumber);
+              hasIntersectionChanges = true;
+            }
+          } else if (intersectingPageNumbers.delete(pageNumber)) {
+            hasIntersectionChanges = true;
           }
         });
+
+        if (hasIntersectionChanges) {
+          setIntersectingPageNumbers(new Set(intersectingPageNumbers));
+        }
 
         if (!hasRestoredRef.current || intersectingPageNumbers.size === 0) {
           return;
@@ -544,6 +562,9 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       observer?.observe(node);
     } else {
       pageRefs.current.delete(pageNumber);
+      if (intersectingPageNumbersRef.current.delete(pageNumber)) {
+        setIntersectingPageNumbers(new Set(intersectingPageNumbersRef.current));
+      }
     }
   }, []);
 
