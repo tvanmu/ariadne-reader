@@ -38,6 +38,7 @@ import {
 } from '../utils/sessionClock';
 import ChapterPanel from './ChapterPanel';
 import DeadlineEditor from './DeadlineEditor';
+import PdfTextLayer from './PdfTextLayer';
 import PdfToolbar from './PdfToolbar';
 import ProgressPanel from './ProgressPanel';
 import ReadingStats from './ReadingStats';
@@ -762,7 +763,14 @@ function PdfPage({ document, pageNumber, pageSize, shouldRender, zoom, registerP
       <div className="page-number-label">Page {pageNumber}</div>
       {renderError ? <p className="form-note error">{renderError}</p> : null}
       <div className="pdf-page-shell" style={{ width: displayWidth, height: displayHeight }}>
-        {shouldRender ? <canvas ref={canvasRef} /> : <div className="pdf-page-placeholder" />}
+        {shouldRender ? (
+          <>
+            <canvas ref={canvasRef} />
+            <PdfTextLayer pdfDocument={document} pageNumber={pageNumber} scale={zoom * PDF_BASE_SCALE} />
+          </>
+        ) : (
+          <div className="pdf-page-placeholder" />
+        )}
       </div>
     </div>
   );

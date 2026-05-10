@@ -2060,7 +2060,9 @@ h3 {
 }
 
 .pdf-page-shell {
+  position: relative;
   contain: layout paint;
+  overflow: hidden;
   background: #f7f3ea;
   box-shadow: 0 18px 52px rgba(5, 7, 6, 0.52);
 }
@@ -2073,11 +2075,67 @@ h3 {
 }
 
 .pdf-page-frame canvas {
+  position: relative;
+  z-index: 1;
   background: #ffffff;
 }
 
 .pdf-page-placeholder {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 240, 231, 0.96));
+}
+
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  user-select: text;
+  pointer-events: auto;
+  transform-origin: 0 0;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+}
+
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+}
+
+.pdf-text-layer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.pdf-text-layer span[role="img"],
+.pdf-text-layer .endOfContent {
+  user-select: none;
+  cursor: default;
+}
+
+.pdf-text-layer ::selection {
+  background: rgba(173, 47, 47, 0.28);
+}
+
+.pdf-text-layer br::selection {
+  background: transparent;
+}
+
+.pdf-text-layer .endOfContent {
+  position: absolute;
+  display: block;
+  inset: 100% 0 0;
+  z-index: 0;
 }
 
 .page-number-label {
