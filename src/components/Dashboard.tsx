@@ -107,9 +107,13 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
         calculateFileHash(buffer),
       ]);
 
-      const duplicate = projects.find(
-        (project) => project.fileName === file.name && project.totalPages === totalPages,
-      );
+      const duplicate = projects.find((project) => {
+        if (project.fileHash) {
+          return project.fileHash === fileHash;
+        }
+
+        return project.fileName === file.name && project.totalPages === totalPages;
+      });
 
       const nextPendingUpload = { file, fileHash, totalPages };
 
