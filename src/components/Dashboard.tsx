@@ -29,22 +29,22 @@ interface PendingUpload {
 const heroSummaryItems = [
   {
     label: 'Page',
-    detail: 'Resume from the exact place you stopped.',
+    detail: 'Place saved.',
     Icon: BookOpen,
   },
   {
     label: 'Chapters',
-    detail: 'Turn long PDFs into a readable map.',
+    detail: 'Structure mapped.',
     Icon: ListTree,
   },
   {
     label: 'Deadline',
-    detail: 'Keep the finish date in sight.',
+    detail: 'Date visible.',
     Icon: CalendarDays,
   },
   {
     label: 'Reading time',
-    detail: 'Know the effort before you start.',
+    detail: 'Effort estimated.',
     Icon: Clock,
   },
 ];
@@ -228,15 +228,7 @@ export default function Dashboard({ user, storageMode, onOpenProject, onSignIn }
       <div className="dashboard-hero">
         <div className="hero-copy">
           <h1 className="hero-headline">A clear path through dense documents.</h1>
-          <div
-            className="hero-summary"
-            aria-labelledby="hero-summary-title"
-          >
-            <div className="summary-intro">
-              <p id="hero-summary-title">
-                Page, chapters, deadline, and reading time stay connected.
-              </p>
-            </div>
+          <div className="hero-summary" aria-label="Reading progress tools">
             <div className="summary-thread" aria-label="Reading progress tools">
               {heroSummaryItems.map(({ label, detail, Icon }) => (
                 <div className="summary-step" key={label}>

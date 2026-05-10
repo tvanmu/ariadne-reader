@@ -775,11 +775,11 @@ h3 {
   position: relative;
   display: grid;
   gap: 16px;
-  width: min(720px, 100%);
+  width: min(780px, 100%);
   max-width: 100%;
   min-width: 0;
   margin: 0 auto;
-  padding: 16px 18px 18px;
+  padding: 22px 28px 24px;
   overflow: hidden;
   border: 1px solid rgba(242, 234, 217, 0.14);
   border-radius: var(--radius);
@@ -805,42 +805,23 @@ h3 {
   animation: summary-sheen 8s var(--ease-out-cubic) infinite;
 }
 
-.summary-intro,
 .summary-thread {
   position: relative;
   z-index: 1;
-}
-
-.summary-intro {
-  display: grid;
-  justify-items: center;
-  min-width: 0;
-}
-
-.summary-intro p {
-  width: min(100%, 36ch);
-  margin: 0;
-  color: var(--ivory);
-  font-family: var(--font-serif);
-  font-size: 22px;
-  font-weight: 500;
-  line-height: 1.14;
-  text-align: center;
-  text-wrap: balance;
 }
 
 .summary-thread {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 24px;
   width: 100%;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .summary-thread::before {
   position: absolute;
-  top: 28px;
+  top: 31px;
   right: 9%;
   left: 9%;
   height: 1px;
@@ -857,7 +838,7 @@ h3 {
 
 .summary-thread::after {
   position: absolute;
-  top: 27px;
+  top: 30px;
   left: 8%;
   width: 84%;
   height: 3px;
@@ -874,8 +855,8 @@ h3 {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: 38px 22px auto;
-  gap: 10px;
+  grid-template-rows: 42px 26px auto;
+  gap: 12px;
   align-content: start;
   justify-items: center;
   min-width: 0;
@@ -885,8 +866,8 @@ h3 {
 .summary-icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border: 1px solid rgba(184, 144, 102, 0.44);
   border-radius: 50%;
   background:
@@ -922,7 +903,7 @@ h3 {
   align-self: center;
   color: var(--ivory);
   font-family: var(--font-serif);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 500;
   line-height: 1.05;
   text-transform: uppercase;
@@ -931,10 +912,10 @@ h3 {
 
 .summary-text span {
   justify-self: center;
-  width: min(100%, 15ch);
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.35;
+  width: min(100%, 14ch);
+  color: var(--ivory-dim);
+  font-size: 14px;
+  line-height: 1.2;
 }
 
 @keyframes summary-route {
@@ -2221,12 +2202,7 @@ h3 {
 
   .hero-summary {
     width: 100%;
-    padding: 14px;
-  }
-
-  .summary-intro p {
-    width: min(100%, 24ch);
-    font-size: 20px;
+    padding: 16px;
   }
 
   .summary-thread {
@@ -2269,7 +2245,7 @@ h3 {
     justify-self: start;
     width: auto;
     max-width: 18ch;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .upload-dropzone.hero {
