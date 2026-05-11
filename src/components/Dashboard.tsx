@@ -29,22 +29,22 @@ interface PendingUpload {
 const heroSummaryItems = [
   {
     label: 'Page',
-    detail: 'Place saved.',
+    detail: 'Resume from the exact place you stopped.',
     Icon: BookOpen,
   },
   {
     label: 'Chapters',
-    detail: 'Structure mapped.',
+    detail: 'Turn long PDFs into a readable map.',
     Icon: ListTree,
   },
   {
     label: 'Deadline',
-    detail: 'Date visible.',
+    detail: 'Keep the finish date in sight.',
     Icon: CalendarDays,
   },
   {
     label: 'Reading time',
-    detail: 'Effort estimated.',
+    detail: 'Know the effort before you start.',
     Icon: Clock,
   },
 ];
