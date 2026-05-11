@@ -1973,6 +1973,21 @@ h3 {
   color: var(--danger);
 }
 
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(224, 135, 121, 0.28);
+  border-radius: 999px;
+  background: rgba(224, 135, 121, 0.12);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
 @keyframes save-pulse {
   0%,
   100% {
@@ -2027,6 +2042,25 @@ h3 {
   padding: 16px;
   background: rgba(18, 23, 19, 0.86);
   box-shadow: none;
+}
+
+.reader-save-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -10px 0 14px auto;
+  width: min(100%, 520px);
+  padding: 10px 12px;
+  border: 1px solid rgba(224, 135, 121, 0.26);
+  border-radius: var(--radius);
+  background: rgba(28, 14, 13, 0.88);
+  color: #f0a094;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.reader-save-alert svg {
+  flex-shrink: 0;
 }
 
 .panel-heading {
@@ -2430,6 +2464,44 @@ h3 {
   gap: 8px;
 }
 
+.marginalia-color-swatches {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+}
+
+.marginalia-color-button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(242, 234, 217, 0.18);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 2px rgba(5, 7, 6, 0.34);
+  transition: border-color 160ms var(--ease-out-cubic), transform 160ms var(--ease-out-cubic);
+}
+
+.marginalia-color-button:hover,
+.marginalia-color-button[aria-pressed='true'] {
+  border-color: rgba(244, 239, 228, 0.72);
+  transform: translateY(-1px);
+}
+
+.marginalia-color-button.is-thread {
+  background: #b89066;
+}
+
+.marginalia-color-button.is-sun {
+  background: #dfc77e;
+}
+
+.marginalia-color-button.is-olive {
+  background: #9eba8b;
+}
+
+.marginalia-color-button.is-wine {
+  background: #ad2f2f;
+}
+
 .marginalia-editor {
   display: grid;
   gap: 8px;
@@ -2630,7 +2702,8 @@ h3 {
 .highlight-selection-toolbar {
   position: absolute;
   z-index: 6;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: center;
   gap: 8px;
   padding: 7px;
@@ -2680,6 +2753,21 @@ h3 {
   font-size: 12px;
   font-weight: 720;
   white-space: nowrap;
+}
+
+.highlight-note-button:disabled,
+.highlight-swatch:disabled {
+  cursor: progress;
+  opacity: 0.64;
+}
+
+.highlight-selection-error {
+  grid-column: 1 / -1;
+  max-width: 220px;
+  margin: 0;
+  color: #f0a094;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .pdf-text-layer br::selection {

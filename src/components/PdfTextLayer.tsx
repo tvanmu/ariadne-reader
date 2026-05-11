@@ -42,6 +42,8 @@ export default function PdfTextLayer({
   const layerRef = useRef<HTMLDivElement | null>(null);
   const [renderVersion, setRenderVersion] = useState(0);
   const [pendingSelection, setPendingSelection] = useState<PendingTextSelection | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creatingHighlight, setCreatingHighlight] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +121,7 @@ export default function PdfTextLayer({
 
     if (ranges.length === 0) {
       setPendingSelection(null);
+      setCreateError(null);
       return;
     }
 
@@ -127,9 +130,11 @@ export default function PdfTextLayer({
 
     if (!excerpt || !toolbarPosition) {
       setPendingSelection(null);
+      setCreateError(null);
       return;
     }
 
+    setCreateError(null);
     setPendingSelection({
       ranges,
       excerpt,
@@ -143,9 +148,12 @@ export default function PdfTextLayer({
   }
 
   async function createSelectedHighlight(color: HighlightColor, openNote: boolean) {
-    if (!pendingSelection) {
+    if (!pendingSelection || creatingHighlight) {
       return;
     }
+
+    setCreatingHighlight(true);
+    setCreateError(null);
 
     try {
       await onCreateHighlight(
@@ -161,8 +169,10 @@ export default function PdfTextLayer({
 
       window.getSelection()?.removeAllRanges();
       setPendingSelection(null);
-    } catch {
-      return;
+    } catch (caught) {
+      setCreateError(getHighlightCreateErrorMessage(caught));
+    } finally {
+      setCreatingHighlight(false);
     }
   }
 
@@ -179,15 +189,16 @@ export default function PdfTextLayer({
         <div
           className="highlight-selection-toolbar"
           style={{ left: pendingSelection.x, top: pendingSelection.y }}
-          onMouseDown={(event) => event.preventDefault()}
+          onMouseDown={(event) => event.stopPropagation()}
           role="toolbar"
           aria-label="Highlight selection"
         >
           <div className="highlight-swatches" aria-label="Highlight color">
             {HIGHLIGHT_COLORS.map((color) => (
               <button
-                aria-label={`Highlight ${color}`}
+                aria-label={`Highlight ${getHighlightColorLabel(color)}`}
                 className={`highlight-swatch is-${color}`}
+                disabled={creatingHighlight}
                 key={color}
                 type="button"
                 onClick={() => void createSelectedHighlight(color, false)}
@@ -197,14 +208,58 @@ export default function PdfTextLayer({
           <button
             className="highlight-note-button"
             type="button"
+            disabled={creatingHighlight}
             onClick={() => void createSelectedHighlight('thread', true)}
           >
-            Add note
+            {creatingHighlight ? 'Saving...' : 'Add note'}
           </button>
+          {createError ? <p className="highlight-selection-error">{createError}</p> : null}
         </div>
       ) : null}
     </>
   );
+}
+
+function getHighlightColorLabel(color: HighlightColor): string {
+  if (color === 'sun') {
+    return 'sun';
+  }
+
+  if (color === 'olive') {
+    return 'olive';
+  }
+
+  if (color === 'wine') {
+    return 'wine';
+  }
+
+  return 'thread';
+}
+
+function getHighlightCreateErrorMessage(caught: unknown): string {
+  const message = getCaughtMessage(caught);
+
+  if (message.toLowerCase().includes('permission denied')) {
+    return 'Cloud notes need database access before they can save.';
+  }
+
+  if (message.toLowerCase().includes('does not exist')) {
+    return 'Cloud notes need the highlights table before they can save.';
+  }
+
+  return 'Could not save this highlight.';
+}
+
+function getCaughtMessage(caught: unknown): string {
+  if (caught instanceof Error) {
+    return caught.message;
+  }
+
+  if (caught && typeof caught === 'object' && 'message' in caught) {
+    return String(caught.message);
+  }
+
+  return '';
 }
 
 function applySearchHighlights(container: HTMLDivElement | null, searchQuery: string) {

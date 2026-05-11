@@ -62,6 +62,7 @@ export default function PdfToolbar({
 }: PdfToolbarProps) {
   const roundedProgress = Math.round(progress);
   const TintIcon = pageTint === 'night' ? Moon : pageTint === 'sepia' ? Sun : BookOpen;
+  const saveStatusLabel = getSaveStatusLabel(saveState);
 
   return (
     <div className="reader-toolbar">
@@ -141,15 +142,16 @@ export default function PdfToolbar({
       </div>
 
       <div className="toolbar-right">
-        <span className={`save-pip ${saveState}`} aria-label={`Save state: ${saveState}`}>
-          {saveState === 'saved' ? (
-            <Check size={13} />
-          ) : saveState === 'error' ? (
+        {saveState === 'error' ? (
+          <span className="save-status error" role="status" title={saveStatusLabel}>
             <AlertTriangle size={13} />
-          ) : (
-            <span className="save-pip-dot" />
-          )}
-        </span>
+            <span>Save failed</span>
+          </span>
+        ) : (
+          <span className={`save-pip ${saveState}`} aria-label={saveStatusLabel} title={saveStatusLabel}>
+            {saveState === 'saved' ? <Check size={13} /> : <span className="save-pip-dot" />}
+          </span>
+        )}
         <button
           className={`panel-toggle${rightOpen ? ' is-active' : ''}`}
           type="button"
@@ -163,6 +165,22 @@ export default function PdfToolbar({
       </div>
     </div>
   );
+}
+
+function getSaveStatusLabel(saveState: string): string {
+  if (saveState === 'saving') {
+    return 'Saving';
+  }
+
+  if (saveState === 'saved') {
+    return 'Saved';
+  }
+
+  if (saveState === 'error') {
+    return 'Save failed';
+  }
+
+  return 'Not saved yet';
 }
 
 function getPageTintLabel(pageTint: 'paper' | 'sepia' | 'night'): string {

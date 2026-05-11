@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type {
   Highlight,
+  HighlightColor,
   HighlightCreateInput,
   PageTint,
   PDFProject,
@@ -136,6 +137,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const [pageTint, setPageTint] = useState<PageTint>('paper');
   const [pageInput, setPageInput] = useState('1');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
   const [estimatedPageSize, setEstimatedPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [outlineChapters, setOutlineChapters] = useState<PDFProject['chapters']>([]);
@@ -338,6 +340,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setIsSearching(false);
       setHighlights([]);
       setEditingHighlightId(null);
+      setSaveError(null);
       setReadingSessions([]);
       readingSessionsRef.current = [];
       visitedPageNumbersRef.current = new Set();
@@ -376,11 +379,13 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
           .then((loadedHighlights) => {
             if (active) {
               setHighlights(sortHighlights(loadedHighlights));
+              setSaveError(null);
             }
           })
-          .catch(() => {
+          .catch((caught) => {
             if (active) {
               setHighlights([]);
+              setSaveError(getSaveErrorMessage(caught, 'Could not load cloud notes.'));
             }
           });
         readingSessionsPromise
@@ -631,6 +636,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       setSaveState('saving');
 
       try {
+        setSaveError(null);
         const updatedProject =
           storageMode === 'cloud'
             ? await updateCloudProgress(activeProject, progressState)
@@ -650,8 +656,10 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
             : current,
         );
         setSaveState('saved');
-      } catch {
+        setSaveError(null);
+      } catch (caught) {
         setSaveState('error');
+        setSaveError(getSaveErrorMessage(caught, 'Could not save reading position.'));
       }
     },
     [storageMode],
@@ -1186,6 +1194,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     setSaveState('saving');
 
     try {
+      setSaveError(null);
       const highlight =
         storageMode === 'cloud'
           ? await createCloudHighlight(project, input)
@@ -1193,6 +1202,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
       setHighlights((currentHighlights) => sortHighlights([...currentHighlights, highlight]));
       setSaveState('saved');
+      setSaveError(null);
 
       if (options.openNote) {
         setRightOpen(true);
@@ -1200,6 +1210,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       }
     } catch (caught) {
       setSaveState('error');
+      setSaveError(getSaveErrorMessage(caught, 'Could not save highlight.'));
       throw caught;
     }
   }
@@ -1208,6 +1219,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     setSaveState('saving');
 
     try {
+      setSaveError(null);
       const updatedHighlight =
         storageMode === 'cloud'
           ? await updateCloudHighlight(highlight, { note })
@@ -1221,8 +1233,36 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         ),
       );
       setSaveState('saved');
+      setSaveError(null);
     } catch (caught) {
       setSaveState('error');
+      setSaveError(getSaveErrorMessage(caught, 'Could not save note.'));
+      throw caught;
+    }
+  }
+
+  async function saveHighlightColor(highlight: Highlight, color: HighlightColor): Promise<void> {
+    setSaveState('saving');
+
+    try {
+      setSaveError(null);
+      const updatedHighlight =
+        storageMode === 'cloud'
+          ? await updateCloudHighlight(highlight, { color })
+          : await updateLocalHighlight(highlight, { color });
+
+      setHighlights((currentHighlights) =>
+        sortHighlights(
+          currentHighlights.map((currentHighlight) =>
+            currentHighlight.id === updatedHighlight.id ? updatedHighlight : currentHighlight,
+          ),
+        ),
+      );
+      setSaveState('saved');
+      setSaveError(null);
+    } catch (caught) {
+      setSaveState('error');
+      setSaveError(getSaveErrorMessage(caught, 'Could not update highlight color.'));
       throw caught;
     }
   }
@@ -1231,6 +1271,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     setSaveState('saving');
 
     try {
+      setSaveError(null);
       if (storageMode === 'cloud') {
         await deleteCloudHighlight(highlight);
       } else {
@@ -1242,8 +1283,10 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
       );
       setEditingHighlightId((highlightId) => (highlightId === highlight.id ? null : highlightId));
       setSaveState('saved');
+      setSaveError(null);
     } catch (caught) {
       setSaveState('error');
+      setSaveError(getSaveErrorMessage(caught, 'Could not delete highlight.'));
       throw caught;
     }
   }
@@ -1295,6 +1338,12 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
         onCycleZoomMode={cycleZoomMode}
         onCyclePageTint={cyclePageTint}
       />
+      {saveError ? (
+        <div className="reader-save-alert" role="status">
+          <AlertTriangle size={16} />
+          <span>{saveError}</span>
+        </div>
+      ) : null}
       {searchOpen ? (
         <SearchBar
           query={searchQuery}
@@ -1350,16 +1399,17 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
         <aside className={`reader-side right${rightOpen ? '' : ' is-collapsed'}`}>
           <ProgressPanel project={{ ...project, currentPage }} readingSessions={readingSessions} />
-          <DeadlineEditor project={project} onSave={saveDeadline} />
-          <ReadingStats project={{ ...project, currentPage }} readingSessions={readingSessions} />
           <MarginaliaPanel
             highlights={highlights}
             editingHighlightId={editingHighlightId}
             onEditingHighlightChange={setEditingHighlightId}
             onJumpToPage={scrollToPage}
             onUpdateHighlight={saveHighlightNote}
+            onUpdateHighlightColor={saveHighlightColor}
             onDeleteHighlight={removeHighlight}
           />
+          <DeadlineEditor project={project} onSave={saveDeadline} />
+          <ReadingStats project={{ ...project, currentPage }} readingSessions={readingSessions} />
         </aside>
       </div>
     </section>
@@ -1840,6 +1890,37 @@ function sortHighlights(highlights: Highlight[]): Highlight[] {
 
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
+}
+
+function getSaveErrorMessage(caught: unknown, fallback: string): string {
+  const message = getCaughtMessage(caught);
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes('permission denied')) {
+    return `${fallback} Supabase refused access to the notes table.`;
+  }
+
+  if (normalizedMessage.includes('does not exist')) {
+    return `${fallback} The Supabase notes table is missing.`;
+  }
+
+  if (normalizedMessage.includes('row-level security')) {
+    return `${fallback} Supabase row-level security blocked the save.`;
+  }
+
+  return message ? `${fallback} ${message}` : fallback;
+}
+
+function getCaughtMessage(caught: unknown): string {
+  if (caught instanceof Error) {
+    return caught.message;
+  }
+
+  if (caught && typeof caught === 'object' && 'message' in caught) {
+    return String(caught.message);
+  }
+
+  return '';
 }
 
 function buildSessionSummary(
