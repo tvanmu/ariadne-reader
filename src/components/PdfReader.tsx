@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type {
   Highlight,
@@ -88,6 +88,7 @@ const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 2.4;
 const ZOOM_STEP_PERCENT = 10;
 const VIEWER_FIT_WIDTH_MIN_INSET = 68;
+const SCROLL_ANCHOR_VIEWPORT_RATIO = 0.4;
 const PAGE_RENDER_RADIUS = 2;
 const PAGE_SIZE_BATCH_SIZE = 25;
 const SEARCH_DEBOUNCE_DELAY_MS = 200;
@@ -103,6 +104,12 @@ const DEFAULT_PAGE_SIZE: PageSize = {
 interface PageSize {
   width: number;
   height: number;
+}
+
+interface ScrollAnchor {
+  pageNumber: number;
+  offsetRatio: number;
+  viewportRatio: number;
 }
 
 type IdleWorkHandle = {
@@ -176,6 +183,7 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   const searchTextCacheRef = useRef<Map<number, PageSearchText>>(new Map());
   const pendingGoToFirstRef = useRef(false);
   const pendingGoToFirstTimerRef = useRef<number | null>(null);
+  const pendingZoomAnchorRef = useRef<ScrollAnchor | null>(null);
 
   const progress = useMemo(
     () => (project ? calculateProgress(currentPage, project.totalPages) : 0),
@@ -217,8 +225,13 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
 
     const pageSize = pageSizes[currentPage] ?? estimatedPageSize;
     const nextZoom = getFitWidthZoom(viewer, pageSize);
-    setZoom((currentZoom) => (Math.abs(currentZoom - nextZoom) < 0.005 ? currentZoom : nextZoom));
-  }, [currentPage, estimatedPageSize, pageSizes, zoomMode]);
+    if (Math.abs(zoom - nextZoom) < 0.005) {
+      return;
+    }
+
+    queueZoomScrollAnchor();
+    setZoom(nextZoom);
+  }, [currentPage, estimatedPageSize, pageSizes, zoom, zoomMode]);
 
   useEffect(() => {
     projectRef.current = project;
@@ -717,6 +730,16 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     updateFitWidthZoom();
   }, [leftOpen, rightOpen, updateFitWidthZoom]);
 
+  useLayoutEffect(() => {
+    const anchor = pendingZoomAnchorRef.current;
+    if (!anchor) {
+      return;
+    }
+
+    pendingZoomAnchorRef.current = null;
+    restoreZoomScrollAnchor(anchor);
+  }, [zoom]);
+
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || zoomMode !== 'fit-width') {
@@ -1093,17 +1116,33 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
   }
 
   function zoomManually(direction: 'in' | 'out') {
+    const nextZoom = getSteppedZoom(zoom, direction);
     setZoomMode('manual');
-    setZoom((value) => getSteppedZoom(value, direction));
+    if (Math.abs(zoom - nextZoom) < 0.005) {
+      return;
+    }
+
+    queueZoomScrollAnchor();
+    setZoom(nextZoom);
   }
 
   function resetZoom() {
     setZoomMode('manual');
+    if (Math.abs(zoom - 1) < 0.005) {
+      return;
+    }
+
+    queueZoomScrollAnchor();
     setZoom(1);
   }
 
   function toggleFitWidthZoom() {
-    setZoomMode((mode) => (mode === 'fit-width' ? 'manual' : 'fit-width'));
+    if (zoomMode === 'fit-width') {
+      setZoomMode('manual');
+      return;
+    }
+
+    enterFitWidthZoom();
   }
 
   function cycleZoomMode() {
@@ -1113,12 +1152,112 @@ export default function PdfReader({ projectId, storageMode, onBack }: PdfReaderP
     }
 
     if (Math.round(zoom * 100) === 100) {
-      setZoomMode('fit-width');
+      enterFitWidthZoom();
       return;
     }
 
-    setZoomMode('manual');
-    setZoom(1);
+    resetZoom();
+  }
+
+  function enterFitWidthZoom() {
+    const viewer = viewerRef.current;
+    const pageSize = pageSizes[currentPage] ?? estimatedPageSize;
+
+    setZoomMode('fit-width');
+
+    if (!viewer) {
+      return;
+    }
+
+    const nextZoom = getFitWidthZoom(viewer, pageSize);
+    if (Math.abs(zoom - nextZoom) < 0.005) {
+      return;
+    }
+
+    queueZoomScrollAnchor();
+    setZoom(nextZoom);
+  }
+
+  function queueZoomScrollAnchor() {
+    pendingZoomAnchorRef.current = captureZoomScrollAnchor();
+  }
+
+  function captureZoomScrollAnchor(): ScrollAnchor | null {
+    const viewer = viewerRef.current;
+    if (!viewer) {
+      return null;
+    }
+
+    const viewerRect = viewer.getBoundingClientRect();
+    const anchorY = viewerRect.top + viewer.clientHeight * SCROLL_ANCHOR_VIEWPORT_RATIO;
+    let closestAnchor: (ScrollAnchor & { distance: number }) | null = null;
+
+    for (const [pageNumber, node] of pageRefs.current) {
+      const pageShell = node.querySelector<HTMLElement>('.pdf-page-shell');
+      if (!pageShell) {
+        continue;
+      }
+
+      const pageRect = pageShell.getBoundingClientRect();
+      if (pageRect.height <= 0) {
+        continue;
+      }
+
+      const distance =
+        anchorY < pageRect.top ? pageRect.top - anchorY : Math.max(anchorY - pageRect.bottom, 0);
+      const offset = Math.min(Math.max(anchorY - pageRect.top, 0), pageRect.height);
+      const anchor = {
+        pageNumber,
+        offsetRatio: offset / pageRect.height,
+        viewportRatio: SCROLL_ANCHOR_VIEWPORT_RATIO,
+        distance,
+      };
+
+      if (distance === 0) {
+        return {
+          pageNumber: anchor.pageNumber,
+          offsetRatio: anchor.offsetRatio,
+          viewportRatio: anchor.viewportRatio,
+        };
+      }
+
+      if (!closestAnchor || distance < closestAnchor.distance) {
+        closestAnchor = anchor;
+      }
+    }
+
+    return closestAnchor
+      ? {
+          pageNumber: closestAnchor.pageNumber,
+          offsetRatio: closestAnchor.offsetRatio,
+          viewportRatio: closestAnchor.viewportRatio,
+        }
+      : null;
+  }
+
+  function restoreZoomScrollAnchor(anchor: ScrollAnchor) {
+    const viewer = viewerRef.current;
+    const pageNode = pageRefs.current.get(anchor.pageNumber);
+    const pageShell = pageNode?.querySelector<HTMLElement>('.pdf-page-shell');
+
+    if (!viewer || !pageShell) {
+      return;
+    }
+
+    const viewerRect = viewer.getBoundingClientRect();
+    const pageRect = pageShell.getBoundingClientRect();
+    const targetScrollTop =
+      viewer.scrollTop +
+      (pageRect.top - viewerRect.top) +
+      pageRect.height * anchor.offsetRatio -
+      viewer.clientHeight * anchor.viewportRatio;
+    const maxScrollTop = Math.max(viewer.scrollHeight - viewer.clientHeight, 0);
+    const nextScrollTop = Math.min(Math.max(targetScrollTop, 0), maxScrollTop);
+
+    viewer.scrollTop = nextScrollTop;
+    setScrollOffset(nextScrollTop);
+    setCurrentPage(anchor.pageNumber);
+    setPageInput(String(anchor.pageNumber));
   }
 
   function cyclePageTint() {
