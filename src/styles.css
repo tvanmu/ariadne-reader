@@ -2863,6 +2863,8 @@ h3 {
   .reader-grid.left-open.right-open {
     grid-template-columns: 1fr;
     gap: 14px;
+    align-content: start;
+    overflow: auto;
   }
 
   .reader-side.is-collapsed {
@@ -2870,7 +2872,7 @@ h3 {
   }
 
   .reader-shell {
-    height: auto;
+    height: calc(100dvh - 112px);
     min-height: 0;
   }
 
@@ -2885,7 +2887,8 @@ h3 {
   }
 
   .pdf-viewer {
-    min-height: 68dvh;
+    height: min(68dvh, 640px);
+    min-height: min(68dvh, 420px);
   }
 
   .project-card:hover .card-extras,
