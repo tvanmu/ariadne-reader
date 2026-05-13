@@ -16,7 +16,10 @@ CREATE INDEX highlights_user_id_idx ON public.highlights(user_id);
 
 ALTER TABLE public.highlights ENABLE ROW LEVEL SECURITY;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.highlights TO authenticated;
+REVOKE ALL ON public.highlights FROM anon, public;
+
+GRANT USAGE ON SCHEMA public TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.highlights TO authenticated, service_role;
 
 CREATE POLICY "owner_rw" ON public.highlights
   FOR ALL

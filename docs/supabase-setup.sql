@@ -108,11 +108,30 @@ alter table public.chapters enable row level security;
 alter table public.highlights enable row level security;
 alter table public.reading_sessions enable row level security;
 
-grant usage on schema public to authenticated;
-grant select, insert, update, delete on public.pdf_projects to authenticated;
-grant select, insert, update, delete on public.chapters to authenticated;
-grant select, insert, update, delete on public.highlights to authenticated;
-grant select, insert, update, delete on public.reading_sessions to authenticated;
+-- Supabase Data API access must be explicit. These tables are only for
+-- signed-in users and trusted server-side code, not anonymous visitors.
+alter default privileges for role postgres in schema public
+  revoke select, insert, update, delete on tables from anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema public
+  revoke usage, select on sequences from anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema public
+  revoke execute on functions from anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema public
+  revoke execute on functions from public;
+
+revoke all on public.pdf_projects from anon, public;
+revoke all on public.chapters from anon, public;
+revoke all on public.highlights from anon, public;
+revoke all on public.reading_sessions from anon, public;
+
+grant usage on schema public to authenticated, service_role;
+grant select, insert, update, delete on public.pdf_projects to authenticated, service_role;
+grant select, insert, update, delete on public.chapters to authenticated, service_role;
+grant select, insert, update, delete on public.highlights to authenticated, service_role;
+grant select, insert, update, delete on public.reading_sessions to authenticated, service_role;
 
 drop policy if exists "Users can read their own projects" on public.pdf_projects;
 create policy "Users can read their own projects"

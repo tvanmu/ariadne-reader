@@ -12,7 +12,10 @@ CREATE INDEX reading_sessions_user_id_idx ON public.reading_sessions(user_id);
 
 ALTER TABLE public.reading_sessions ENABLE ROW LEVEL SECURITY;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.reading_sessions TO authenticated;
+REVOKE ALL ON public.reading_sessions FROM anon, public;
+
+GRANT USAGE ON SCHEMA public TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.reading_sessions TO authenticated, service_role;
 
 CREATE POLICY "owner_rw" ON public.reading_sessions
   FOR ALL
