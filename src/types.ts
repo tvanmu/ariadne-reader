@@ -106,6 +106,9 @@ export interface DeadlineStatus {
   daysRemaining: number | null;
   dailyTarget: number | null;
   pagesRemaining: number;
+  scheduleStatus: 'none' | 'ahead' | 'behind' | 'on-track' | 'complete' | 'past-due';
+  scheduleDeltaPages: number | null;
+  expectedPage: number | null;
 }
 
 export interface ChapterValidationResult {

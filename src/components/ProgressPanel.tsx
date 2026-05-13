@@ -7,6 +7,7 @@ import {
   getDeadlineStatus,
 } from '../utils/progress';
 import { getRecentLocalDateKeys } from '../utils/dateKeys';
+import { pluralize } from '../utils/format';
 import MazeIcon from './MazeIcon';
 import SessionClock from './SessionClock';
 
@@ -57,6 +58,12 @@ export default function ProgressPanel({ project, readingSessions }: ProgressPane
                 : `${deadline.dailyTarget} pages`}
           </strong>
         </div>
+        <div>
+          <span>Deadline pace</span>
+          <strong className={`deadline-pace-value is-${deadline.scheduleStatus}`}>
+            {formatDeadlinePace(deadline)}
+          </strong>
+        </div>
       </div>
 
       <div className="current-chapter">
@@ -73,6 +80,30 @@ export default function ProgressPanel({ project, readingSessions }: ProgressPane
       ) : null}
     </section>
   );
+}
+
+function formatDeadlinePace(deadline: ReturnType<typeof getDeadlineStatus>): string {
+  if (!deadline.hasDeadline) {
+    return 'No deadline';
+  }
+
+  if (deadline.scheduleStatus === 'past-due') {
+    return 'Past due';
+  }
+
+  if (deadline.scheduleStatus === 'complete') {
+    return 'Finished';
+  }
+
+  if (deadline.scheduleStatus === 'ahead' && deadline.scheduleDeltaPages !== null) {
+    return `${pluralize(deadline.scheduleDeltaPages, 'page')} ahead`;
+  }
+
+  if (deadline.scheduleStatus === 'behind' && deadline.scheduleDeltaPages !== null) {
+    return `${pluralize(Math.abs(deadline.scheduleDeltaPages), 'page')} behind`;
+  }
+
+  return 'On pace';
 }
 
 function isBehindThreeDayPace(

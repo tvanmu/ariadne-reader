@@ -1,6 +1,7 @@
 import type { Chapter, ChapterValidationResult, DeadlineStatus, PDFProject } from '../types';
 
 const dayMs = 24 * 60 * 60 * 1000;
+const scheduleTolerancePages = 1;
 
 export function clampPage(page: number, totalPages: number): number {
   if (!Number.isFinite(page)) {
@@ -32,6 +33,9 @@ export function getDeadlineStatus(project: PDFProject): DeadlineStatus {
       daysRemaining: null,
       dailyTarget: null,
       pagesRemaining,
+      scheduleStatus: 'none',
+      scheduleDeltaPages: null,
+      expectedPage: null,
     };
   }
 
@@ -39,6 +43,7 @@ export function getDeadlineStatus(project: PDFProject): DeadlineStatus {
   const deadline = startOfLocalDay(new Date(`${project.deadline}T00:00:00`));
   const daysRemaining = Math.ceil((deadline.getTime() - today.getTime()) / dayMs);
   const isPast = daysRemaining < 0;
+  const schedule = getScheduleProgress(project, today, deadline, pagesRemaining);
 
   if (isPast) {
     return {
@@ -47,6 +52,9 @@ export function getDeadlineStatus(project: PDFProject): DeadlineStatus {
       daysRemaining,
       dailyTarget: null,
       pagesRemaining,
+      scheduleStatus: pagesRemaining === 0 ? 'complete' : 'past-due',
+      scheduleDeltaPages: schedule.deltaPages,
+      expectedPage: schedule.expectedPage,
     };
   }
 
@@ -58,6 +66,9 @@ export function getDeadlineStatus(project: PDFProject): DeadlineStatus {
     daysRemaining,
     dailyTarget: pagesRemaining === 0 ? 0 : Math.ceil(pagesRemaining / divisor),
     pagesRemaining,
+    scheduleStatus: schedule.status,
+    scheduleDeltaPages: schedule.deltaPages,
+    expectedPage: schedule.expectedPage,
   };
 }
 
@@ -112,4 +123,62 @@ export function validateChapter(chapter: Omit<Chapter, 'id'>, totalPages: number
 
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getScheduleProgress(
+  project: PDFProject,
+  today: Date,
+  deadline: Date,
+  pagesRemaining: number,
+): {
+  status: DeadlineStatus['scheduleStatus'];
+  deltaPages: number | null;
+  expectedPage: number | null;
+} {
+  if (pagesRemaining === 0) {
+    return {
+      status: 'complete',
+      deltaPages: null,
+      expectedPage: project.totalPages,
+    };
+  }
+
+  const uploadedAt = startOfLocalDay(new Date(project.uploadedAt));
+  const scheduleStart = Number.isNaN(uploadedAt.getTime()) ? today : uploadedAt;
+  const totalScheduleDays = Math.max(
+    Math.ceil((deadline.getTime() - scheduleStart.getTime()) / dayMs),
+    1,
+  );
+  const elapsedScheduleDays = Math.min(
+    Math.max(Math.ceil((today.getTime() - scheduleStart.getTime()) / dayMs), 0),
+    totalScheduleDays,
+  );
+  const expectedPage = clampPage(
+    Math.ceil((project.totalPages * elapsedScheduleDays) / totalScheduleDays),
+    project.totalPages,
+  );
+  const currentPage = clampPage(project.currentPage, project.totalPages);
+  const deltaPages = currentPage - expectedPage;
+
+  if (deltaPages > scheduleTolerancePages) {
+    return {
+      status: 'ahead',
+      deltaPages,
+      expectedPage,
+    };
+  }
+
+  if (deltaPages < -scheduleTolerancePages) {
+    return {
+      status: 'behind',
+      deltaPages,
+      expectedPage,
+    };
+  }
+
+  return {
+    status: 'on-track',
+    deltaPages,
+    expectedPage,
+  };
 }
